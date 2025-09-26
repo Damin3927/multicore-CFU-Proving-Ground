@@ -16,7 +16,8 @@ module cpu (
     output wire                        dbus_wvalid_o,
     output wire [`DBUS_DATA_WIDTH-1:0] dbus_wdata_o,
     output wire [`DBUS_STRB_WIDTH-1:0] dbus_wstrb_o,
-    input  wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata_i
+    input  wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata_i,
+    input  wire                        hart_index
 );
 
     //-----------------------------------------------------------------------------------------

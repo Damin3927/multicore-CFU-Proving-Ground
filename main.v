@@ -30,74 +30,105 @@ module main (
 `endif
 
     wire                        rst = !rst_ni || !locked;
-    wire [`IBUS_ADDR_WIDTH-1:0] imem_raddr;
-    wire [`IBUS_DATA_WIDTH-1:0] imem_rdata;
-    wire                        dbus_we;
-    wire [`DBUS_ADDR_WIDTH-1:0] dbus_addr;
-    wire [`DBUS_DATA_WIDTH-1:0] dbus_wdata;
-    wire [`DBUS_STRB_WIDTH-1:0] dbus_wstrb;
-    wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata;
+    wire [`IBUS_ADDR_WIDTH-1:0] imem_raddr [0:`NCORES-1];
+    wire [`IBUS_DATA_WIDTH-1:0] imem_rdata [0:`NCORES-1];
+    wire                        dbus_we   [0:`NCORES-1];
+    wire [`DBUS_ADDR_WIDTH-1:0] dbus_addr [0:`NCORES-1];
+    wire [`DBUS_DATA_WIDTH-1:0] dbus_wdata[0:`NCORES-1];
+    wire [`DBUS_STRB_WIDTH-1:0] dbus_wstrb[0:`NCORES-1];
+    wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata[0:`NCORES-1];
 
-    reg                         rdata_sel = 0;
-    always @(posedge clk) rdata_sel <= dbus_addr[30];
-    assign dbus_rdata = (rdata_sel) ? perf_rdata : dmem_rdata;
+    wire [31:0] hart_rdata[0:`NCORES-1];
 
-    cpu cpu (
-        .clk_i        (clk),         // input  wire
-        .rst_i        (rst),         // input  wire
-        .ibus_araddr_o(imem_raddr),  // output wire [`IBUS_ADDR_WIDTH-1:0]
-        .ibus_rdata_i (imem_rdata),  // input  wire [`IBUS_DATA_WIDTH-1:0]
-        .dbus_addr_o  (dbus_addr),   // output wire [`DBUS_ADDR_WIDTH-1:0]
-        .dbus_wvalid_o(dbus_we),     // output wire
-        .dbus_wdata_o (dbus_wdata),  // output wire [`DBUS_DATA_WIDTH-1:0]
-        .dbus_wstrb_o (dbus_wstrb),  // output wire [`DBUS_STRB_WIDTH-1:0]
-        .dbus_rdata_i (dbus_rdata)   // input  wire [`DBUS_DATA_WIDTH-1:0]
-    );
+    wire        dmem_we   [0:`NCORES-1];
+    wire [31:0] dmem_addr [0:`NCORES-1];
+    wire [31:0] dmem_wdata[0:`NCORES-1];
+    wire [3:0]  dmem_wstrb[0:`NCORES-1];
+    wire [31:0] dmem_rdata[0:`NCORES-1];
+
+    wire        vmem_we     = dbus_we[0] & (dbus_addr[0][29]);
+    wire [15:0] vmem_addr   = dbus_addr[0][15:0];
+    wire [2:0]  vmem_wdata  = dbus_wdata[0][2:0];
+
+    genvar i;
+    generate
+        for (i = 0; i < `NCORES; i = i + 1) begin
+            reg [1:0]                   rdata_sel = 0;
+            always @(posedge clk) begin
+                if (!dbus_addr[i][30]) rdata_sel <= 0;      // dmem
+                else if (!dbus_addr[i][12]) rdata_sel <= 1;  // perf
+                else rdata_sel <= 2;                         // hart
+            end
+            wire [31:0] perf_rdata;
+            assign dbus_rdata[i] = (rdata_sel == 0) ? dmem_rdata[i] :
+                                (rdata_sel == 1) ? perf_rdata :
+                                hart_rdata[i];
+            cpu cpu (
+                .clk_i        (clk),            // input  wire
+                .rst_i        (rst),            // input  wire
+                .ibus_araddr_o(imem_raddr[i]),  // output wire [`IBUS_ADDR_WIDTH-1:0]
+                .ibus_rdata_i (imem_rdata[i]),  // input  wire [`IBUS_DATA_WIDTH-1:0]
+                .dbus_addr_o  (dbus_addr[i]),   // output wire [`DBUS_ADDR_WIDTH-1:0]
+                .dbus_wvalid_o(dbus_we[i]),     // output wire
+                .dbus_wdata_o (dbus_wdata[i]),  // output wire [`DBUS_DATA_WIDTH-1:0]
+                .dbus_wstrb_o (dbus_wstrb[i]),  // output wire [`DBUS_STRB_WIDTH-1:0]
+                .dbus_rdata_i (dbus_rdata[i]),  // input  wire [`DBUS_DATA_WIDTH-1:0]
+                .hart_index   (i)               // input  wire
+            );
+
+            assign hart_rdata[i] = i;
+
+            assign dmem_we[i]     = dbus_we[i] & (dbus_addr[i][28]);
+            assign dmem_addr[i]   = dbus_addr[i];
+            assign dmem_wdata[i]  = dbus_wdata[i];
+            assign dmem_wstrb[i]  = dbus_wstrb[i];
+
+            wire perf_we = dbus_we[i] & (dbus_addr[i][30]) & (!dbus_addr[i][12]);
+            wire [3:0] perf_addr = dbus_addr[i][3:0];
+            wire [2:0] perf_wdata = dbus_wdata[i][2:0];
+            perf_cntr perf (
+                .clk_i  (clk),         // input  wire
+                .addr_i (perf_addr),   // input  wire [3:0]
+                .wdata_i(perf_wdata),  // input  wire [2:0]
+                .w_en_i (perf_we),     // input  wire
+                .rdata_o(perf_rdata)   // output wire [31:0]
+            );
+        end
+    endgenerate
 
     m_imem imem (
-        .clk_i  (clk),         // input  wire
-        .raddr_i(imem_raddr),  // input  wire [ADDR_WIDTH-1:0]
-        .rdata_o(imem_rdata)   // output reg  [DATA_WIDTH-1:0]
+        .clka_i  (clk),            // input  wire
+        .clkb_i  (clk),            // input  wire
+        .raddra_i(imem_raddr[0]),  // input  wire [ADDR_WIDTH-1:0]
+        .raddrb_i(imem_raddr[1]),  // input  wire [ADDR_WIDTH-1:0]
+        .rdataa_o(imem_rdata[0]),  // output wire [DATA_WIDTH-1:0]
+        .rdatab_o(imem_rdata[1])   // output wire [DATA_WIDTH-1:0]
     );
 
-    wire dmem_we = dbus_we & (dbus_addr[28]);
-    wire [31:0] dmem_addr = dbus_addr;
-    wire [31:0] dmem_wdata = dbus_wdata;
-    wire [3:0] dmem_wstrb = dbus_wstrb;
-    wire [31:0] dmem_rdata;
     m_dmem dmem (
-        .clk_i  (clk),         // input  wire
-        .we_i   (dmem_we),     // input  wire                  
-        .addr_i (dmem_addr),   // input  wire [ADDR_WIDTH-1:0] 
-        .wdata_i(dmem_wdata),  // input  wire [DATA_WIDTH-1:0] 
-        .wstrb_i(dmem_wstrb),  // input  wire [STRB_WIDTH-1:0] 
-        .rdata_o(dmem_rdata)   // output reg  [DATA_WIDTH-1:0] 
+        .clka_i  (clk),            // input  wire
+        .clkb_i  (clk),            // input  wire
+        .wea_i   (dmem_we[0]),     // input  wire                  
+        .web_i   (dmem_we[1]),     // input  wire
+        .addra_i (dmem_addr[0]),   // input  wire [ADDR_WIDTH-1:0] 
+        .addrb_i (dmem_addr[1]),   // input  wire [ADDR_WIDTH-1:0] 
+        .wdataa_i(dmem_wdata[0]),  // input  wire [DATA_WIDTH-1:0] 
+        .wdatab_i(dmem_wdata[1]),  // input  wire [DATA_WIDTH-1:0] 
+        .wstrba_i(dmem_wstrb[0]),  // input  wire [STRB_WIDTH-1:0] 
+        .wstrbb_i(dmem_wstrb[1]),  // input  wire [STRB_WIDTH-1:0] 
+        .rdataa_o(dmem_rdata[0]),  // output reg  [DATA_WIDTH-1:0] 
+        .rdatab_o(dmem_rdata[1])   // output reg  [DATA_WIDTH-1:0] 
     );
 
-    wire vmem_we = dbus_we & (dbus_addr[29]);
-    wire [15:0] vmem_addr = dbus_addr[15:0];
-    wire [2:0] vmem_wdata = dbus_wdata[2:0];
     wire [15:0] vmem_raddr;
     wire [2:0] vmem_rdata_t;
     vmem vmem (
-        .clk_i  (clk),          // input wire
-        .we_i   (vmem_we),      // input wire
-        .waddr_i(vmem_addr),    // input wire [15:0]
-        .wdata_i(vmem_wdata),   // input wire [15:0]
-        .raddr_i(vmem_raddr),   // input wire [15:0]
-        .rdata_o(vmem_rdata_t)  // output wire [15:0]
-    );
-
-    wire perf_we = dbus_we & (dbus_addr[30]);
-    wire [3:0] perf_addr = dbus_addr[3:0];
-    wire [2:0] perf_wdata = dbus_wdata[2:0];
-    wire [31:0] perf_rdata;
-    perf_cntr perf (
-        .clk_i  (clk),         // input  wire
-        .addr_i (perf_addr),   // input  wire [3:0]
-        .wdata_i(perf_wdata),  // input  wire [2:0]
-        .w_en_i (perf_we),     // input  wire
-        .rdata_o(perf_rdata)   // output wire [31:0]
+        .clk_i  (clk),            // input  wire
+        .we_i   (vmem_we),        // input  wire                  
+        .waddr_i (vmem_addr),     // input  wire [15:0] 
+        .wdata_i(vmem_wdata),     // input  wire [2:0] 
+        .raddr_i (vmem_raddr),    // input  wire [15:0]
+        .rdata_o (vmem_rdata_t)   // output wire [2:0]
     );
 
     wire [15:0] vmem_rdata = {{5{vmem_rdata_t[2]}}, {6{vmem_rdata_t[1]}}, {5{vmem_rdata_t[0]}}};
@@ -108,54 +139,82 @@ module main (
         .st7789_DC (st7789_DC),   // output wire
         .st7789_RES(st7789_RES),  // output wire
         .w_raddr   (vmem_raddr),  // output wire [15:0]
-        .w_rdata   (vmem_rdata)   // input  wire [15:0]
+        .w_rdata   (vmem_rdata)  // input  wire [15:0]
     );
 
 endmodule
 
 module m_imem (
-    input  wire        clk_i,
-    input  wire [31:0] raddr_i,
-    output wire [31:0] rdata_o
+    input  wire        clka_i,
+    input  wire        clkb_i,
+    input  wire [31:0] raddra_i,
+    input  wire [31:0] raddrb_i,
+    output wire [31:0] rdataa_o,
+    output wire [31:0] rdatab_o
 );
-
     (* ram_style = "block" *) reg [31:0] imem[0:`IMEM_ENTRIES-1];
     `include "memi.txt"
 
-    wire [`IMEM_ADDRW-1:0] valid_raddr = raddr_i[`IMEM_ADDRW+1:2];
+    wire [`IMEM_ADDRW-1:0] valid_raddra = raddra_i[`IMEM_ADDRW+1:2];
+    wire [`IMEM_ADDRW-1:0] valid_raddrb = raddrb_i[`IMEM_ADDRW+1:2];
 
-    reg [31:0] rdata;
-    always @(posedge clk_i) begin
-        rdata <= imem[valid_raddr];
+    reg [31:0] rdataa;
+    always @(posedge clka_i) begin
+        rdataa <= imem[valid_raddra];
     end
-    assign rdata_o = rdata;
+    assign rdataa_o = rdataa;
+
+    reg [31:0] rdatab;
+    always @(posedge clkb_i) begin
+        rdatab <= imem[valid_raddrb];
+    end
+    assign rdatab_o = rdatab;
 endmodule
 
 module m_dmem (
-    input  wire        clk_i,
-    input  wire        we_i,
-    input  wire [31:0] addr_i,
-    input  wire [31:0] wdata_i,
-    input  wire [ 3:0] wstrb_i,
-    output wire [31:0] rdata_o
+    input  wire        clka_i,
+    input  wire        clkb_i,
+    input  wire        wea_i,
+    input  wire        web_i,
+    input  wire [31:0] addra_i,
+    input  wire [31:0] addrb_i,
+    input  wire [31:0] wdataa_i,
+    input  wire [31:0] wdatab_i,
+    input  wire [ 3:0] wstrba_i,
+    input  wire [ 3:0] wstrbb_i,
+    output wire [31:0] rdataa_o,
+    output wire [31:0] rdatab_o
 );
 
     (* ram_style = "block" *) reg [31:0] dmem[0:`DMEM_ENTRIES-1];
     `include "memd.txt"
 
-    wire [`DMEM_ADDRW-1:0] valid_addr = addr_i[`DMEM_ADDRW+1:2];
+    wire [`DMEM_ADDRW-1:0] valid_addra = addra_i[`DMEM_ADDRW+1:2];
+    wire [`DMEM_ADDRW-1:0] valid_addrb = addrb_i[`DMEM_ADDRW+1:2];
 
-    reg [31:0] rdata = 0;
-    always @(posedge clk_i) begin
-        if (we_i) begin  ///// data bus
-            if (wstrb_i[0]) dmem[valid_addr][7:0] <= wdata_i[7:0];
-            if (wstrb_i[1]) dmem[valid_addr][15:8] <= wdata_i[15:8];
-            if (wstrb_i[2]) dmem[valid_addr][23:16] <= wdata_i[23:16];
-            if (wstrb_i[3]) dmem[valid_addr][31:24] <= wdata_i[31:24];
+    reg [31:0] rdataa = 0;
+    always @(posedge clka_i) begin
+        if (wea_i) begin  ///// data bus
+            if (wstrba_i[0]) dmem[valid_addra][7:0] <= wdataa_i[7:0];
+            if (wstrba_i[1]) dmem[valid_addra][15:8] <= wdataa_i[15:8];
+            if (wstrba_i[2]) dmem[valid_addra][23:16] <= wdataa_i[23:16];
+            if (wstrba_i[3]) dmem[valid_addra][31:24] <= wdataa_i[31:24];
         end
-        rdata <= dmem[valid_addr];
+        rdataa <= dmem[valid_addra];
     end
-    assign rdata_o = rdata;
+    assign rdataa_o = rdataa;
+
+    reg [31:0] rdatab = 0;
+    always @(posedge clkb_i) begin
+        if (web_i) begin  ///// data bus
+            if (wstrbb_i[0]) dmem[valid_addrb][7:0] <= wdatab_i[7:0];
+            if (wstrbb_i[1]) dmem[valid_addrb][15:8] <= wdatab_i[15:8];
+            if (wstrbb_i[2]) dmem[valid_addrb][23:16] <= wdatab_i[23:16];
+            if (wstrbb_i[3]) dmem[valid_addrb][31:24] <= wdatab_i[31:24];
+        end
+        rdatab <= dmem[valid_addrb];
+    end
+    assign rdatab_o = rdatab;
 endmodule
 
 module perf_cntr (

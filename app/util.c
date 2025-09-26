@@ -47,3 +47,7 @@ void pg_prints(const char *str) {
         str++;
     }
 }
+
+int pg_hart_id() {
+    return *(int *)0x40001000;
+}

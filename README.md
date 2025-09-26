@@ -115,6 +115,7 @@ If you change the size of the data memory, please appropriately modify the LENGT
 | 0x40000000 | performance counter control (0: reset, 1: start, 2: stop)|
 | 0x40000004 | mcycle                  |
 | 0x40000008 | mcycleh                 |
+| 0x40001000 | hart index              |
 | 0x80000000 | tohost (for simulation) |
 
 ## Write a bitstream

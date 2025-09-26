@@ -38,7 +38,12 @@ _start:
     li      x29, 0
     li      x30, 0
     li      x31, 0
+    li      t0, 0x40001000
+    lw      t1, 0(t0)
+    li      t2, 0x00100000
+    mul     t1, t1, t2
     la      sp, _fstack
+    add     sp, sp, t1
     jal     main
     j       finish
 

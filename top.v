@@ -11,6 +11,9 @@ module top;
     reg rxd = 1;
     wire txd;
 
+    localparam int CORE0 = 0;
+
+
     //==============================================================================
     // Perfomance Counter
     //------------------------------------------------------------------------------
@@ -19,12 +22,17 @@ module top;
     int unsigned minstret = 0;
     int unsigned br_pred_cntr = 0;
     int unsigned br_misp_cntr = 0;
+
+    wire cpu0_stall            = m0.genblk1[CORE0].cpu.stall;
+    wire cpu0_exma_v           = m0.genblk1[CORE0].cpu.ExMa_v;
+    wire cpu0_exma_is_ctrl_tsfr= m0.genblk1[CORE0].cpu.ExMa_is_ctrl_tsfr;
+    wire cpu0_ma_br_misp       = m0.genblk1[CORE0].cpu.Ma_br_misp;
     always @(posedge clk) begin
         ++mtime;
         if (!m0.rst && !cpu_sim_fini)++mcycle;
-        if (!m0.rst && !cpu_sim_fini && !m0.cpu.stall && m0.cpu.ExMa_v)++minstret;
-        if (!m0.rst && !cpu_sim_fini && m0.cpu.ExMa_is_ctrl_tsfr)++br_pred_cntr;
-        if (!m0.rst && !cpu_sim_fini && m0.cpu.ExMa_is_ctrl_tsfr && m0.cpu.Ma_br_misp)
+        if (!m0.rst && !cpu_sim_fini && !cpu0_stall && cpu0_exma_v)++minstret;
+        if (!m0.rst && !cpu_sim_fini && cpu0_exma_is_ctrl_tsfr)++br_pred_cntr;
+        if (!m0.rst && !cpu_sim_fini && cpu0_exma_is_ctrl_tsfr && cpu0_ma_br_misp)
             ++br_misp_cntr;
     end
 
@@ -44,10 +52,10 @@ module top;
     //------------------------------------------------------------------------------
     reg cpu_sim_fini = 0;
     always @(posedge clk) begin
-        if (m0.cpu.dbus_addr_o[31] && m0.cpu.dbus_wvalid_o) begin
-            if (m0.cpu.dbus_wdata == 32'h00020000) cpu_sim_fini <= 1;
-            else $write("%c", m0.cpu.dbus_wdata[7:0]);
-            if (m0.cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
+        if (m0.dbus_addr[CORE0][31] && m0.dbus_we[CORE0]) begin
+            if (m0.dbus_wdata[CORE0] == 32'h00020000) cpu_sim_fini <= 1;
+            else $write("%c", m0.dbus_wdata[CORE0][7:0]);
+            if (m0.dbus_addr[CORE0] < 32'h10000000) cpu_sim_fini <= 1;
         end
         if (cpu_sim_fini) begin
             $finish(1);

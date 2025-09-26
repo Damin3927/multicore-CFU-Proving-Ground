@@ -6,3 +6,4 @@ void pg_printc(char c);
 void pg_printd(long long x);
 void pg_printh(int x);
 void pg_prints(const char *str);
+int pg_hart_id();
