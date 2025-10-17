@@ -95,12 +95,14 @@ The generated bitstream file is copied in `build/main.bit`.
 Configure and run FPGA with this `main.bit`.
 When the FPGA is configured, an application displays many random characters, similar to the simulation.
 
-Note that a mini display (ST7789 TFT LCD) should be appropriately connected to the Pmod JC of Arty A7-35T FPGA board.
-
-![arty](figures/arty.JPG)
-
-This [site](https://github.com/kisek/fpga_arty_a7_st7789) will explain the way to connect a mini display to Arty A7-35T FPGA board.
-
+> [!NOTE]
+> Note that a mini display (ST7789 TFT LCD) should be appropriately connected to the Pmod JC of Arty A7-35T FPGA board.
+> ![arty](figures/arty.JPG)
+> This [site](https://github.com/kisek/fpga_arty_a7_st7789) will explain the way to connect a mini display to Arty A7-35T FPGA board.
+> 
+> For Nexys A7, connect to JXADC.
+> ![nexys](figures/nexys.JPEG)
+>
 
 ## Memory Map
 The default memory map is shown below.
@@ -116,7 +118,7 @@ If you change the size of the data memory, please appropriately modify the LENGT
 | 0x40000004 | mcycle                  |
 | 0x40000008 | mcycleh                 |
 | 0x40001000 | hart index              |
-| 0x80000000 | tohost (for simulation) |
+| 0x80000000 | tohost (reserved) |
 
 ## Write a bitstream
 When using the Vivado Hardware Server, you can use `scripts/prog_dev.tcl`.
@@ -125,6 +127,24 @@ In `scripts/prog_dev.tcl`, please specify the IP ADDRESS and PORT number of the 
 Once the specification is complete, you can write the bitstream to the board with `make conf`.
 
 ## History
+2025-10-16 Ver 1.7.10:
+- Refactor divider module and update store_unit address calculation
+
+2025-10-10 Ver 1.7.9:
+- Add `fflush()` to ensure output is flushed during simulation
+
+2025-10-09 Ver 1.7.8:
+- Add bitstream configuration to `cmod_a7.xdc` and `nexys_a7,xdc`
+
+2025-10-08 Ver 1.7.7:
+- Update perf.c
+
+2025-10-07 Ver 1.7.6:
+- Update Nexys exsample
+
+2025-10-02 Ver 1.7.5:
+- Make target has been added.
+
 2025-07-25 Ver 1.7.4:
 - Configuration bug has been fixed.
 
