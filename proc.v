@@ -17,6 +17,7 @@ module cpu (
     output wire [`DBUS_DATA_WIDTH-1:0] dbus_wdata_o,
     output wire [`DBUS_STRB_WIDTH-1:0] dbus_wstrb_o,
     input  wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata_i,
+    input  wire                        dbus_stall_i,
     input  wire                        hart_index
 );
 
@@ -379,7 +380,7 @@ module cpu (
     always @(posedge clk_i) begin
         ExMa_mul_stall <= Ex_mul_stall;
         ExMa_div_stall <= Ex_div_stall;
-        ExMa_stall     <= Ex_mul_stall | Ex_div_stall | Ex_cfu_stall;
+        ExMa_stall     <= Ex_mul_stall | Ex_div_stall | Ex_cfu_stall | dbus_stall_i;
         ExMa_mdc_rslt  <= Ex_mul_rslt | Ex_div_rslt | Ex_cfu_rslt;
         if (rst) begin
             ExMa_v  <= 0;
