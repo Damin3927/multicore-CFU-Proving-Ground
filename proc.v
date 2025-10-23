@@ -10,6 +10,7 @@
 module cpu (
     input  wire                        clk_i,
     input  wire                        rst_i,
+    input  wire                        stall_i,
     output wire [`IBUS_ADDR_WIDTH-1:0] ibus_araddr_o,
     input  wire [`IBUS_DATA_WIDTH-1:0] ibus_rdata_i,
     output wire [`DBUS_ADDR_WIDTH-1:0] dbus_addr_o,
@@ -20,10 +21,11 @@ module cpu (
     input  wire                        dbus_stall_i,
     input  wire                        hart_index
 );
+    wire w_stall = stall_i;
 
-    //-----------------------------------------------------------------------------------------
-    // pipeline registers
-    //-----------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// pipeline registers
+//------------------------------------------------------------------------------
     // IF: Instruction Fetch
     reg [          `XLEN-1:0] r_pc;  // program counter
 
@@ -90,11 +92,11 @@ module cpu (
     reg [                4:0] MaWb_rd;
     reg [          `XLEN-1:0] MaWb_rslt;
 
-    //-----------------------------------------------------------------------------------------
-    // pipeline control
-    //-----------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// pipeline control
+//------------------------------------------------------------------------------
     reg                       rst;
-    always @(posedge clk_i) rst <= rst_i;
+    always @(posedge clk_i) if (!w_stall) rst <= rst_i;
 
     wire Ma_br_tkn = (ExMa_v && ExMa_br_tkn);
     wire        Ma_br_misp     = (rst) ? 1 : 
@@ -109,9 +111,9 @@ module cpu (
     wire Ma_v = ExMa_v;
     wire stall = ExMa_stall;
 
-    //-----------------------------------------------------------------------------------------
-    // IF: Instruction Fetch
-    //-----------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// IF: Instruction Fetch
+//------------------------------------------------------------------------------
     wire [`PC_W-1:0] If_pc;  // the program counter of the next clock cycle
     wire [`PC_W-1:0] If_pc_inc;  //
     wire If_pc_stall;
@@ -131,6 +133,7 @@ module cpu (
     bimodal bimodal (
         .clk_i        (clk_i),           // input  wire
         .rst_i        (rst),             // input  wire
+        .stall_i      (w_stall),         // input  wire
         .raddr_i      (If_pc),           // input  wire [`XLEN-1:0]
         .pat_hist_o   (If_pat_hist),     // output reg        [1:0]
         .br_pred_tkn_o(If_br_pred_tkn),  // output wire
@@ -144,7 +147,8 @@ module cpu (
 
     assign If_pc_stall = ExMa_stall || IfId_load_muldiv_use;
     assign If_pc_inc = (If_pc_stall) ? 0 : 4;
-    assign If_pc = (Ma_br_misp                   ) ? Ma_br_true_pc :
+    assign If_pc = (w_stall) ? r_pc :
+                   (Ma_br_misp                   ) ? Ma_br_true_pc :
                    (!If_pc_stall & If_br_pred_tkn) ? If_br_pred_pc : r_pc+If_pc_inc;
 
     pre_decoder pre_decoder (
@@ -163,7 +167,7 @@ module cpu (
                                   Id_cfu_ctrl[`CFU_CTRL_IS_CFU]  )
                               && IfId_rf_we && ((IfId_rd==If_rs1) || (IfId_rd==If_rs2));
 
-    always @(posedge clk_i) begin
+    always @(posedge clk_i) if (!w_stall) begin
         r_pc <= If_pc;  // update pc
         if (rst) begin
             IfId_v  <= 0;
@@ -186,9 +190,9 @@ module cpu (
         end
     end
 
-    //-----------------------------------------------------------------------------------------
-    // ID: Instruction Decode
-    //-----------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// ID: Instruction Decode
+//------------------------------------------------------------------------------
     // instruction decoder
     wire [`SRC2_CTRL_WIDTH-1:0] Id_src2_ctrl;
     wire [ `ALU_CTRL_WIDTH-1:0] Id_alu_ctrl;
@@ -226,7 +230,7 @@ module cpu (
         .rs2_i  (IfId_rs2),    // input  wire       [4:0]
         .xrs1_o (Id_xrs1),     // output wire [`XLEN-1:0]
         .xrs2_o (Id_xrs2),     // output wire [`XLEN-1:0]
-        .we_i   (Wb_xreg_we),  // input  wire
+        .we_i   (Wb_xreg_we && !w_stall),  // input  wire
         .rd_i   (MaWb_rd),     // input  wire       [4:0]
         .wdata_i(MaWb_rslt)    // input  wire [`XLEN-1:0]
     );
@@ -247,7 +251,7 @@ module cpu (
 
     wire [31:0] Id_j_pc4 = (Id_bru_ctrl[`BRU_CTRL_IS_JAL_JALR]) ? IfId_pc + 4 : 0;
 
-    always @(posedge clk_i) begin
+    always @(posedge clk_i) if (!w_stall) begin
         if (rst) begin
             IdEx_v  <= 0;
             IdEx_pc <= 0;
@@ -275,9 +279,9 @@ module cpu (
         end
     end
 
-    //-----------------------------------------------------------------------------------------
-    // EX: Execution
-    //-----------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// EX: Execution
+//------------------------------------------------------------------------------
     wire Ex_valid = IdEx_v && !Ma_br_misp && !ExMa_stall;
 
     ///// data forwarding
@@ -320,7 +324,7 @@ module cpu (
     wire [         `XLEN-1:0] dbus_wdata = dbus_wdata_o;  // for simulation
     wire [`DBUS_OFFSET_W-1:0] dbus_offset;  // Note
     store_unit store_unit (
-        .valid_i      (Ex_valid),       // input  wire
+        .valid_i      (Ex_valid && !w_stall), // input  wire
         .lsu_ctrl_i   (IdEx_lsu_ctrl),  // input  wire [`LSU_CTRL_WIDTH-1:0]
         .src1_i       (Ex_src1),        // input  wire           [`XLEN-1:0]
         .src2_i       (Ex_src2),        // input  wire           [`XLEN-1:0]
@@ -338,7 +342,7 @@ module cpu (
     multiplier multiplier (
         .clk_i     (clk_i),          // input  wire
         .rst_i     (rst),            // input  wire // Note
-        .stall_i   (0),              // input  wire
+        .stall_i   (w_stall),        // input  wire
         .valid_i   (Ex_valid),       // input  wire
         .mul_ctrl_i(IdEx_mul_ctrl),  // input  wire [`MUL_CTRL_WIDTH-1:0]
         .src1_i    (Ex_src1),        // input  wire           [`XLEN-1:0]
@@ -353,7 +357,7 @@ module cpu (
     divider divider (
         .clk_i     (clk_i),          // input  wire
         .rst_i     (rst),            // input  wire
-        .stall_i   (0),              // input  wire // Note
+        .stall_i   (w_stall),        // input  wire // Note
         .valid_i   (Ex_valid),       // input  wire
         .div_ctrl_i(IdEx_div_ctrl),  // input  wire [`DIV_CTRL_WIDTH-1:0]
         .src1_i    (Ex_src1),        // input  wire           [`XLEN-1:0]
@@ -377,7 +381,7 @@ module cpu (
         .rslt_o  (Ex_cfu_rslt)           // output wire [31:0] 
     );
 
-    always @(posedge clk_i) begin
+    always @(posedge clk_i) if (!w_stall) begin
         ExMa_mul_stall <= Ex_mul_stall;
         ExMa_div_stall <= Ex_div_stall;
         ExMa_stall     <= Ex_mul_stall | Ex_div_stall | Ex_cfu_stall | dbus_stall_i;
@@ -405,9 +409,9 @@ module cpu (
         end
     end
 
-    //-----------------------------------------------------------------------------------------
-    // MA: Memory Access
-    //-----------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// MA: Memory Access
+//------------------------------------------------------------------------------
     // load unit
     wire [`XLEN-1:0] Ma_load_rslt;
     load_unit load_unit (
@@ -419,7 +423,7 @@ module cpu (
 
     wire [`XLEN-1:0] Ma_rslt = ExMa_rslt | ExMa_mdc_rslt | Ma_load_rslt;
 
-    always @(posedge clk_i) begin
+    always @(posedge clk_i) if (!w_stall) begin
         if (rst) begin
             MaWb_v  <= 0;
             MaWb_pc <= 0;
@@ -434,9 +438,9 @@ module cpu (
         end
     end
 
-    //-----------------------------------------------------------------------------------------
-    // WB: Write Back
-    //-----------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// WB: Write Back
+//------------------------------------------------------------------------------
 endmodule
 
 `define BTB_IDXW $clog2(`BTB_ENTRY)  // BTB index width
@@ -445,6 +449,7 @@ endmodule
 module bimodal (
     input  wire             clk_i,
     input  wire             rst_i,
+    input  wire             stall_i,
     input  wire [     31:0] raddr_i,
     output wire [      1:0] pat_hist_o,
     output wire             br_pred_tkn_o,
@@ -465,7 +470,7 @@ module bimodal (
     wire [`BTB_IDXW-1:0] btb_widx = waddr_i[`BTB_IDXW+`BTB_OSTW-1:`BTB_OSTW];
 
     reg [31:0] r_btb_entry;
-    always @(posedge clk_i) begin
+    always @(posedge clk_i) if (!stall_i) begin
         r_btb_entry <= btb[btb_ridx];
         if (br_tsfr_i) begin
             btb[btb_widx] <= {br_tkn_pc_i[`PC_W-1:2], w_cnt};  // lower tow bits for counter
@@ -705,7 +710,7 @@ module multiplier (
     wire [1:0] w_state = (state==`MUL_IDLE && valid_i && w_mul) ? `MUL_EXEC :
                          (state==`MUL_EXEC) ? `MUL_RET : `MUL_IDLE;
 
-    always @(posedge clk_i) begin
+    always @(posedge clk_i) if (!stall_i) begin
         if (rst_i) begin
             state <= `MUL_IDLE;
         end else if (!stall_i) begin
@@ -727,23 +732,23 @@ module store_unit (
     input  wire [31:0] src2_i,
     input  wire [31:0] imm_i,
     output wire [31:0] dbus_addr_o,
-    output wire [ 1:0] dbus_offset_o,  // ??
-    output wire        dbus_wvalid_o,  // ??
+    output wire [ 1:0] dbus_offset_o,
+    output wire        dbus_wvalid_o,
     output wire [31:0] dbus_wdata_o,
     output wire [ 3:0] dbus_wstrb_o
 );
 
-    assign dbus_addr_o   = (valid_i && (lsu_ctrl_i[`LSU_CTRL_IS_STORE] || lsu_ctrl_i[`LSU_CTRL_IS_LOAD])) ? src1_i + imm_i : 0;  // calculate address with adder
+    assign dbus_addr_o   = (valid_i && (lsu_ctrl_i[`LSU_CTRL_IS_STORE] || 
+                                        lsu_ctrl_i[`LSU_CTRL_IS_LOAD])) ? src1_i + imm_i : 0;
     assign dbus_offset_o = dbus_addr_o[1:0];
-
     assign dbus_wvalid_o = valid_i && lsu_ctrl_i[`LSU_CTRL_IS_STORE];
 
     wire w_sb = lsu_ctrl_i[`LSU_CTRL_IS_BYTE];
     wire w_sh = lsu_ctrl_i[`LSU_CTRL_IS_HALFWORD];
     wire w_sw = lsu_ctrl_i[`LSU_CTRL_IS_WORD];
 
-    assign dbus_wdata_o[7:0] = src2_i[7:0];
-    assign dbus_wdata_o[15:8] = (w_sb) ? src2_i[7:0] : src2_i[15:8];
+    assign dbus_wdata_o[7:0]   = src2_i[7:0];
+    assign dbus_wdata_o[15:8]  = (w_sb) ? src2_i[7:0] : src2_i[15:8];
     assign dbus_wdata_o[23:16] = (w_sw) ? src2_i[23:16] : src2_i[7:0];
     assign dbus_wdata_o[31:24] = (w_sb) ? src2_i[7:0] : (w_sh) ? src2_i[15:8] : src2_i[31:24];
 

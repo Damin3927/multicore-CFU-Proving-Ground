@@ -12,17 +12,15 @@ module main (
     output wire st7789_DC,
     output wire st7789_RES
 );
-    //    wire rst_ni = 1;
-    reg rst_ni = 0;
-    initial #15 rst_ni = 1;
+    reg rst_ni = 0; initial #15 rst_ni = 1;
     wire clk, locked;
 
 `ifdef SYNTHESIS
     clk_wiz_0 clk_wiz_0 (
-        .clk_out1(clk),      // output clk_out1
-        .reset   (!rst_ni),  // input reset
-        .locked  (locked),   // output locked
-        .clk_in1 (clk_i)     // input clk_in1
+        .clk_out1 (clk),      // output clk_out1
+        .reset    (!rst_ni),  // input reset
+        .locked   (locked),   // output locked
+        .clk_in1  (clk_i)     // input clk_in1
     );
 `else
     assign clk    = clk_i;
@@ -42,12 +40,14 @@ module main (
     wire [31:0] hart_rdata[0:`NCORES-1];
 
     wire        dmem_we   [0:`NCORES-1];
+    wire        dmem_re   [0:`NCORES-1];
     wire [31:0] dmem_addr [0:`NCORES-1];
     wire [31:0] dmem_wdata[0:`NCORES-1];
     wire [3:0]  dmem_wstrb[0:`NCORES-1];
     wire [31:0] dmem_rdata[0:`NCORES-1];
 
     // Pack arrays for dbus_dmem module
+    wire [`NCORES-1:0] dmem_re_packed;
     wire [`NCORES-1:0] dmem_we_packed;
     wire [32*`NCORES-1:0] dmem_addr_packed;
     wire [32*`NCORES-1:0] dmem_wdata_packed;
@@ -58,6 +58,7 @@ module main (
     genvar pack_idx;
     generate
         for (pack_idx = 0; pack_idx < `NCORES; pack_idx = pack_idx + 1) begin
+            assign dmem_re_packed[pack_idx] = dmem_re[pack_idx];
             assign dmem_we_packed[pack_idx] = dmem_we[pack_idx];
             assign dmem_addr_packed[32*(pack_idx+1)-1:32*pack_idx] = dmem_addr[pack_idx];
             assign dmem_wdata_packed[32*(pack_idx+1)-1:32*pack_idx] = dmem_wdata[pack_idx];
@@ -102,6 +103,7 @@ module main (
             cpu cpu (
                 .clk_i        (clk),            // input  wire
                 .rst_i        (rst),            // input  wire
+                .stall_i      (0),              // input  wire
                 .ibus_araddr_o(imem_raddr[i]),  // output wire [`IBUS_ADDR_WIDTH-1:0]
                 .ibus_rdata_i (imem_rdata[i]),  // input  wire [`IBUS_DATA_WIDTH-1:0]
                 .dbus_addr_o  (dbus_addr[i]),   // output wire [`DBUS_ADDR_WIDTH-1:0]
@@ -115,6 +117,7 @@ module main (
 
             assign hart_rdata[i] = i;
 
+            assign dmem_re[i]     = rdata_sel_next == 2'd0 ? !dbus_we[i] & (dbus_addr[i][28]) : 0;
             assign dmem_we[i]     = rdata_sel_next == 2'd0 ? dbus_we[i] & (dbus_addr[i][28]) : 0;
             assign dmem_addr[i]   = rdata_sel_next == 2'd0 ? dbus_addr[i] : 0;
             assign dmem_wdata[i]  = rdata_sel_next == 2'd0 ? dbus_wdata[i] : 0;
@@ -159,6 +162,7 @@ module main (
 
     dbus_dmem dbus_dmem (
         .clk_i         (clk),                // input  wire
+        .re_packed_i   (dmem_re_packed),     // input  wire [NCORES-1:0]
         .we_packed_i   (dmem_we_packed),     // input  wire [NCORES-1:0]
         .addr_packed_i (dmem_addr_packed),   // input  wire [32*NCORES-1:0]
         .wdata_packed_i(dmem_wdata_packed),  // input  wire [32*NCORES-1:0]
@@ -168,25 +172,25 @@ module main (
     );
 
     wire [15:0] vmem_raddr;
-    wire [2:0] vmem_rdata_t;
+    wire  [2:0] vmem_rdata_t;
     vmem vmem (
-        .clk_i  (clk),            // input  wire
-        .we_i   (vmem_we),        // input  wire
-        .waddr_i (vmem_addr),     // input  wire [15:0]
-        .wdata_i(vmem_wdata),     // input  wire [2:0]
-        .raddr_i (vmem_raddr),    // input  wire [15:0]
-        .rdata_o (vmem_rdata_t)   // output wire [2:0]
+        .clk_i   (clk),          // input wire
+        .we_i    (vmem_we),      // input wire
+        .waddr_i (vmem_addr),    // input wire [15:0]
+        .wdata_i (vmem_wdata),   // input wire [15:0]
+        .raddr_i (vmem_raddr),   // input wire [15:0]
+        .rdata_o (vmem_rdata_t)  // output wire [15:0]
     );
 
     wire [15:0] vmem_rdata = {{5{vmem_rdata_t[2]}}, {6{vmem_rdata_t[1]}}, {5{vmem_rdata_t[0]}}};
     m_st7789_disp st7789_disp (
-        .w_clk     (clk),         // input  wire
-        .st7789_SDA(st7789_SDA),  // output wire
-        .st7789_SCL(st7789_SCL),  // output wire
-        .st7789_DC (st7789_DC),   // output wire
-        .st7789_RES(st7789_RES),  // output wire
-        .w_raddr   (vmem_raddr),  // output wire [15:0]
-        .w_rdata   (vmem_rdata)  // input  wire [15:0]
+        .w_clk      (clk),         // input  wire
+        .st7789_SDA (st7789_SDA),  // output wire
+        .st7789_SCL (st7789_SCL),  // output wire
+        .st7789_DC  (st7789_DC),   // output wire
+        .st7789_RES (st7789_RES),  // output wire
+        .w_raddr    (vmem_raddr),  // output wire [15:0]
+        .w_rdata    (vmem_rdata)   // input  wire [15:0]
     );
 
 endmodule
@@ -204,13 +208,13 @@ module m_imem (
     wire [`IMEM_ADDRW-1:0] valid_raddra = raddra_i[`IMEM_ADDRW+1:2];
     wire [`IMEM_ADDRW-1:0] valid_raddrb = raddrb_i[`IMEM_ADDRW+1:2];
 
-    reg [31:0] rdataa;
+    reg [31:0] rdataa = 0;
     always @(posedge clk_i) begin
         rdataa <= imem[valid_raddra];
     end
     assign rdataa_o = rdataa;
 
-    reg [31:0] rdatab;
+    reg [31:0] rdatab = 0;
     always @(posedge clk_i) begin
         rdatab <= imem[valid_raddrb];
     end
@@ -382,6 +386,8 @@ endmodule
 
 module m_dmem (
     input  wire        clk_i,
+    input  wire        rea_i,
+    input  wire        reb_i,
     input  wire        wea_i,
     input  wire        web_i,
     input  wire [31:0] addra_i,
@@ -402,39 +408,39 @@ module m_dmem (
 
     reg [31:0] rdataa = 0;
     always @(posedge clk_i) begin
-        if (wea_i) begin  ///// data bus
+        if (wea_i) begin
             if (wstrba_i[0]) dmem[valid_addra][7:0] <= wdataa_i[7:0];
             if (wstrba_i[1]) dmem[valid_addra][15:8] <= wdataa_i[15:8];
             if (wstrba_i[2]) dmem[valid_addra][23:16] <= wdataa_i[23:16];
             if (wstrba_i[3]) dmem[valid_addra][31:24] <= wdataa_i[31:24];
         end
-        rdataa <= dmem[valid_addra];
+        if (rea_i) rdataa <= dmem[valid_addra];
     end
     assign rdataa_o = rdataa;
 
     reg [31:0] rdatab = 0;
     always @(posedge clk_i) begin
-        if (web_i) begin  ///// data bus
+        if (web_i) begin
             if (wstrbb_i[0]) dmem[valid_addrb][7:0] <= wdatab_i[7:0];
             if (wstrbb_i[1]) dmem[valid_addrb][15:8] <= wdatab_i[15:8];
             if (wstrbb_i[2]) dmem[valid_addrb][23:16] <= wdatab_i[23:16];
             if (wstrbb_i[3]) dmem[valid_addrb][31:24] <= wdatab_i[31:24];
         end
-        rdatab <= dmem[valid_addrb];
+        if (reb_i) rdatab <= dmem[valid_addrb];
     end
     assign rdatab_o = rdatab;
 endmodule
 
 module perf_cntr (
     input  wire        clk_i,
-    input  wire [ 3:0] addr_i,
-    input  wire [ 2:0] wdata_i,
+    input  wire  [3:0] addr_i,
+    input  wire  [2:0] wdata_i,
     input  wire        w_en_i,
     output wire [31:0] rdata_o
 );
-    reg [63:0] mcycle = 0;
-    reg [ 1:0] cnt_ctrl = 0;
-    reg [31:0] rdata = 0;
+    reg [63:0] mcycle   = 0;
+    reg  [1:0] cnt_ctrl = 0;
+    reg [31:0] rdata    = 0;
 
     always @(posedge clk_i) begin
         rdata <= (addr_i[2]) ? mcycle[31:0] : mcycle[63:32];
@@ -453,40 +459,41 @@ module vmem (
     input  wire        clk_i,
     input  wire        we_i,
     input  wire [15:0] waddr_i,
-    input  wire [ 2:0] wdata_i,
+    input  wire  [2:0] wdata_i,
     input  wire [15:0] raddr_i,
-    output wire [ 2:0] rdata_o
+    output wire  [2:0] rdata_o
 );
 
     reg [2:0] vmem_lo[0:32767];  // vmem
     reg [2:0] vmem_hi[0:32767];  // vmem
     integer i;
-    initial
+    initial begin
         for (i = 0; i < 32768; i = i + 1) begin
             vmem_lo[i] = 0;
             vmem_hi[i] = 0;
         end
+    end
 
     reg        we;
     reg        top;
-    reg [ 2:0] wdata;
+    reg  [2:0] wdata;
     reg [14:0] waddr;
 
     reg        rtop;
     reg [14:0] raddr;
-    reg [ 2:0] rdata_lo;
-    reg [ 2:0] rdata_hi;
+    reg  [2:0] rdata_lo;
+    reg  [2:0] rdata_hi;
     reg        sel;
 
     localparam ADDR_MASK = 16'h7FFF;
 
     always @(posedge clk_i) begin
-        we <= we_i;
-        top <= waddr_i[15];
+        we    <= we_i;
+        top   <= waddr_i[15];
         waddr <= waddr_i[14:0];
         wdata <= wdata_i;
 
-        rtop <= raddr_i[15];
+        rtop  <= raddr_i[15];
         raddr <= raddr_i[14:0];
 
         if (we) begin
@@ -494,14 +501,12 @@ module vmem (
             else vmem_lo[waddr&ADDR_MASK] <= wdata;
         end
 
-        sel <= rtop;
+        sel      <= rtop;
         rdata_lo <= vmem_lo[raddr&ADDR_MASK];
         rdata_hi <= vmem_hi[raddr&ADDR_MASK];
     end
 
     assign rdata_o = (sel) ? rdata_hi : rdata_lo;
-
-
 `ifndef SYNTHESIS
     reg  [15:0] r_adr_p = 0;
     reg  [15:0] r_dat_p = 0;
@@ -527,17 +532,16 @@ module vmem (
             endcase
         end
 `endif
-
 endmodule
 
 module m_st7789_disp (
-    input wire w_clk,  // main clock signal (100MHz)
-    output wire st7789_SDA,
-    output wire st7789_SCL,
-    output wire st7789_DC,
-    output wire st7789_RES,
+    input  wire        w_clk,  // main clock signal (100MHz)
+    output wire        st7789_SDA,
+    output wire        st7789_SCL,
+    output wire        st7789_DC,
+    output wire        st7789_RES,
     output wire [15:0] w_raddr,
-    input wire [15:0] w_rdata
+    input  wire [15:0] w_rdata
 );
     reg [31:0] r_cnt = 1;
     always @(posedge w_clk) r_cnt <= (r_cnt == 0) ? 0 : r_cnt + 1;
@@ -547,13 +551,13 @@ module m_st7789_disp (
     end
     assign st7789_RES = r_RES;
 
-    wire busy;
-    reg r_en = 0;
-    reg init_done = 0;
-    reg [4:0] r_state = 0;
-    reg [19:0] r_state2 = 0;
-    reg [8:0] r_dat = 0;
-    reg [15:0] r_c = 16'hf800;
+    wire       busy;
+    reg        r_en      = 0;
+    reg        init_done = 0;
+    reg  [4:0] r_state   = 0;
+    reg [19:0] r_state2  = 0;
+    reg  [8:0] r_dat     = 0;
+    reg [15:0] r_c       = 16'hf800;
 
     reg [31:0] r_bcnt = 0;
     always @(posedge w_clk) r_bcnt <= (busy) ? 0 : r_bcnt + 1;
@@ -646,11 +650,11 @@ module m_spi (
     output wire       busy    // busy
 );
     reg [5:0] r_state = 0;
-    reg [7:0] r_cnt = 0;
-    reg r_SCL = 1;
-    reg r_DC = 0;
-    reg [7:0] r_data = 0;
-    reg r_SDA = 0;
+    reg [7:0] r_cnt   = 0;
+    reg       r_SCL   = 1;
+    reg       r_DC    = 0;
+    reg [7:0] r_data  = 0;
+    reg       r_SDA   = 0;
 
     always @(posedge w_clk) begin
         if (en && r_state == 0) begin
@@ -680,6 +684,4 @@ module m_spi (
     assign busy = (r_state != 0 || en);
 endmodule
 /*********************************************************************************************/
-
-
 `resetall
