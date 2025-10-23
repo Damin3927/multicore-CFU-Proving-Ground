@@ -271,7 +271,7 @@ module dbus_dmem #(
     always @(posedge clk_i) begin : reserve_requests_block
         for (j = 0; j < NCORES; j = j + 1) begin
             // Set valid if new request arrives
-            if ((addr[j] != 0) && !req_valid[j]) begin
+            if (!req_valid[j]) begin
                 req_valid[j] <= 1'b1;
                 req_we[j]    <= we[j];
                 req_addr[j]  <= addr[j];
