@@ -103,7 +103,7 @@ module main (
             cpu cpu (
                 .clk_i        (clk),            // input  wire
                 .rst_i        (rst),            // input  wire
-                .stall_i      (0),              // input  wire
+                .stall_i      (dbus_stall[i]),  // input  wire
                 .ibus_araddr_o(imem_raddr[i]),  // output wire [`IBUS_ADDR_WIDTH-1:0]
                 .ibus_rdata_i (imem_rdata[i]),  // input  wire [`IBUS_DATA_WIDTH-1:0]
                 .dbus_addr_o  (dbus_addr[i]),   // output wire [`DBUS_ADDR_WIDTH-1:0]
@@ -111,7 +111,6 @@ module main (
                 .dbus_wdata_o (dbus_wdata[i]),  // output wire [`DBUS_DATA_WIDTH-1:0]
                 .dbus_wstrb_o (dbus_wstrb[i]),  // output wire [`DBUS_STRB_WIDTH-1:0]
                 .dbus_rdata_i (dbus_rdata[i]),  // input  wire [`DBUS_DATA_WIDTH-1:0]
-                .dbus_stall_i (dbus_stall[i]),  // input  wire
                 .hart_index   (i)               // input  wire
             );
 
@@ -225,6 +224,7 @@ module dbus_dmem #(
     parameter NCORES = `NCORES
 ) (
     input wire clk_i,
+    input wire [NCORES-1:0] re_packed_i,
     input wire [NCORES-1:0] we_packed_i,
     input wire [32*NCORES-1:0] addr_packed_i,
     input wire [32*NCORES-1:0] wdata_packed_i,
@@ -236,26 +236,36 @@ module dbus_dmem #(
     genvar i;
 
     // Unpack input arrays
+    wire        re   [0:NCORES-1];
     wire        we   [0:NCORES-1];
     wire [31:0] addr [0:NCORES-1];
     wire [31:0] wdata[0:NCORES-1];
     wire [3:0]  wstrb[0:NCORES-1];
     wire [31:0] rdata[0:NCORES-1];
     wire        stall[0:NCORES-1];
+    reg         stall_o [0:NCORES-1];
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
+            assign re[i]    = re_packed_i[i];
             assign we[i]    = we_packed_i[i];
             assign addr[i]  = addr_packed_i[32*(i+1)-1:32*i];
             assign wdata[i] = wdata_packed_i[32*(i+1)-1:32*i];
             assign wstrb[i] = wstrb_packed_i[4*(i+1)-1:4*i];
             assign rdata_packed_o[32*(i+1)-1:32*i] = rdata[i];
-            assign stall_packed_o[i] = stall[i];
+            assign stall_packed_o[i] = stall_o[i];
         end
     endgenerate
 
+    always @(posedge clk_i) begin
+        for (j = 0; j < NCORES; j = j + 1) begin
+            stall_o[j] <= stall[j];
+        end
+    end
+
     // Reserved request registers for each core
     reg        req_valid [0:NCORES-1];  // request is pending
+    reg        req_re [0:NCORES-1];
     reg        req_we [0:NCORES-1];
     reg [31:0] req_addr [0:NCORES-1];
     reg [31:0] req_wdata [0:NCORES-1];
@@ -276,7 +286,8 @@ module dbus_dmem #(
         for (j = 0; j < NCORES; j = j + 1) begin
             // Set valid if new request arrives
             if (!req_valid[j]) begin
-                req_valid[j] <= 1'b1;
+                req_valid[j] <= addr[j] != 32'h0;  // new request
+                req_re[j]    <= re[j];
                 req_we[j]    <= we[j];
                 req_addr[j]  <= addr[j];
                 req_wdata[j] <= wdata[j];
@@ -284,6 +295,7 @@ module dbus_dmem #(
             end else if (being_served[j]) begin
                 // Clear valid when being served
                 req_valid[j] <= 1'b0;
+                req_re[j]    <= 1'b0;
                 req_we[j]    <= 1'b0;
                 req_addr[j]  <= 32'h0;
                 req_wdata[j] <= 32'h0;
@@ -335,6 +347,8 @@ module dbus_dmem #(
     endgenerate
 
     // Connect to dmem ports - use buffered requests
+    wire rea_int           = sel_valid_a && req_re[sel_core_a];
+    wire reb_int           = sel_valid_b && req_re[sel_core_b];
     wire wea_int           = sel_valid_a && req_we[sel_core_a];
     wire web_int           = sel_valid_b && req_we[sel_core_b];
     wire [31:0] addra_int  = sel_valid_a ? req_addr[sel_core_a]  : 0;
@@ -371,6 +385,8 @@ module dbus_dmem #(
 
     m_dmem dmem (
         .clk_i   (clk_i),            // input  wire
+        .rea_i   (rea_int),          // input  wire
+        .reb_i   (reb_int),          // input  wire
         .wea_i   (wea_int),          // input  wire
         .web_i   (web_int),          // input  wire
         .addra_i (addra_int),        // input  wire [ADDR_WIDTH-1:0]

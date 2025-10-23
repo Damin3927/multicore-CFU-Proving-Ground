@@ -43,9 +43,9 @@ module top;
             if (m0.gen_cpu[CORE0].cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
         end
 
-        if (mtime > 1000000) begin
+        if (mcycle > 1000000) begin
             $write("Simulation timeout!\n");
-            cpu_sim_fini <= 1;
+            $finish(1);
         end
 
         if (cpu_sim_fini) begin

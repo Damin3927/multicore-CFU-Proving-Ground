@@ -7,7 +7,7 @@
 #define TEST_SIZE 100  // Number of words to test per core
 
 // Shared results
-volatile int test_pass[4] = {0, 0, 0, 0};
+volatile int hart_errors[4] = {0, 0, 0, 0};
 volatile int barrier[4] = {0, 0, 0, 0};
 
 int main() {
@@ -34,7 +34,7 @@ int main() {
     }
 
     // Store result
-    test_pass[hart_id] = (errors == 0) ? 1 : 0;
+    hart_errors[hart_id] = errors;
     barrier[hart_id] = 1;
 
     // Hart 0 displays results
@@ -48,18 +48,18 @@ int main() {
 
         pg_lcd_set_pos(0, 1);
         pg_lcd_prints("H0:");
-        pg_lcd_prints(test_pass[0] ? "PASS " : "FAIL ");
-        pg_lcd_prints("H1:");
-        pg_lcd_prints(test_pass[1] ? "PASS" : "FAIL");
+        pg_lcd_printd(hart_errors[0]);
+        pg_lcd_prints(" H1:");
+        pg_lcd_printd(hart_errors[1]);
 
         pg_lcd_set_pos(0, 2);
         pg_lcd_prints("H2:");
-        pg_lcd_prints(test_pass[2] ? "PASS " : "FAIL ");
-        pg_lcd_prints("H3:");
-        pg_lcd_prints(test_pass[3] ? "PASS" : "FAIL");
+        pg_lcd_printd(hart_errors[2]);
+        pg_lcd_prints(" H3:");
+        pg_lcd_printd(hart_errors[3]);
 
         pg_lcd_set_pos(0, 3);
-        if (test_pass[0] && test_pass[1] && test_pass[2] && test_pass[3]) {
+        if (hart_errors[0] == 0 && hart_errors[1] == 0 && hart_errors[2] == 0 && hart_errors[3] == 0) {
             pg_lcd_prints("ALL PASS!");
         } else {
             pg_lcd_prints("FAIL");
