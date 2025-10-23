@@ -243,7 +243,8 @@ module dbus_dmem #(
     wire [3:0]  wstrb[0:NCORES-1];
     wire [31:0] rdata[0:NCORES-1];
     wire        stall[0:NCORES-1];
-    reg         stall_o [0:NCORES-1];
+    reg  [31:0] rdata_reg [0:NCORES-1];
+    reg         stall_o   [0:NCORES-1];
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
@@ -252,7 +253,7 @@ module dbus_dmem #(
             assign addr[i]  = addr_packed_i[32*(i+1)-1:32*i];
             assign wdata[i] = wdata_packed_i[32*(i+1)-1:32*i];
             assign wstrb[i] = wstrb_packed_i[4*(i+1)-1:4*i];
-            assign rdata_packed_o[32*(i+1)-1:32*i] = rdata[i];
+            assign rdata_packed_o[32*(i+1)-1:32*i] = rdata_reg[i];
             assign stall_packed_o[i] = stall_o[i];
         end
     endgenerate
@@ -307,11 +308,17 @@ module dbus_dmem #(
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : gen_output
             assign stall[i] = (addr[i] != 0) // new request arrives
-                            || (req_valid[i] && !being_served[i]); // pending request not being served
+                            || (req_valid[i]); // pending request
             assign rdata[i] = (resp_valid_a && resp_core_a == i) ? rdataa_dmem :
                               (resp_valid_b && resp_core_b == i) ? rdatab_dmem : 32'h0;
         end
     endgenerate
+
+    always @(posedge clk_i) begin
+        for (j = 0; j < NCORES; j = j + 1) begin
+            rdata_reg[j] <= rdata[j];
+        end
+    end
 
     // Combinational logic to select cores in round-robin fashion
     integer k, m;
