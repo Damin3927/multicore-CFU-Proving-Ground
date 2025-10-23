@@ -17,11 +17,11 @@ module top;
     reg [63:0] minstret     = 0;
     reg [63:0] br_pred_cntr = 0;
     reg [63:0] br_misp_cntr = 0;
-    always @(posedge clk) if (!m0.rst && !cpu_sim_fini && !m0.genblk1[CORE0].cpu.stall_i) begin
-        if (!m0.genblk1[CORE0].cpu.stall && m0.genblk1[CORE0].cpu.ExMa_v) minstret <= minstret + 1;
-        if (m0.genblk1[CORE0].cpu.ExMa_v && m0.genblk1[CORE0].cpu.ExMa_is_ctrl_tsfr)
+    always @(posedge clk) if (!m0.rst && !cpu_sim_fini && !m0.gen_cpu[CORE0].cpu.stall_i) begin
+        if (!m0.gen_cpu[CORE0].cpu.stall && m0.gen_cpu[CORE0].cpu.ExMa_v) minstret <= minstret + 1;
+        if (m0.gen_cpu[CORE0].cpu.ExMa_v && m0.gen_cpu[CORE0].cpu.ExMa_is_ctrl_tsfr)
           br_pred_cntr <= br_pred_cntr + 1;
-        if (m0.genblk1[CORE0].cpu.ExMa_v && m0.genblk1[CORE0].cpu.ExMa_is_ctrl_tsfr && m0.genblk1[CORE0].cpu.Ma_br_misp)
+        if (m0.gen_cpu[CORE0].cpu.ExMa_v && m0.gen_cpu[CORE0].cpu.ExMa_is_ctrl_tsfr && m0.gen_cpu[CORE0].cpu.Ma_br_misp)
           br_misp_cntr <= br_misp_cntr + 1;
     end
 //==============================================================================
@@ -37,11 +37,17 @@ module top;
 //------------------------------------------------------------------------------
     reg cpu_sim_fini = 0;
     always @(posedge clk) begin
-        if (m0.genblk1[CORE0].cpu.dbus_addr_o[31] && m0.genblk1[CORE0].cpu.dbus_wvalid_o) begin
-            if (m0.genblk1[CORE0].cpu.dbus_wdata == 32'h00020000) cpu_sim_fini <= 1;
-            else begin $write("%c", m0.genblk1[CORE0].cpu.dbus_wdata[7:0]); $fflush(); end
-            if (m0.genblk1[CORE0].cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
+        if (m0.gen_cpu[CORE0].cpu.dbus_addr_o[31] && m0.gen_cpu[CORE0].cpu.dbus_wvalid_o) begin
+            if (m0.gen_cpu[CORE0].cpu.dbus_wdata == 32'h00020000) cpu_sim_fini <= 1;
+            else begin $write("%c", m0.gen_cpu[CORE0].cpu.dbus_wdata[7:0]); $fflush(); end
+            if (m0.gen_cpu[CORE0].cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
         end
+
+        if (mcycle > 200000) begin
+            $write("Simulation timeout!\n");
+            $finish(1);
+        end
+
         if (cpu_sim_fini) begin
             $finish(1);
         end
@@ -70,11 +76,11 @@ module top;
         end
     end
     always @(posedge clk) if (minstret < 32'h10000)begin
-        if (!m0.rst && !cpu_sim_fini && !m0.genblk1[CORE0].cpu.stall && m0.genblk1[CORE0].cpu.MaWb_v && !m0.genblk1[CORE0].cpu.stall_i) begin
-            $fwrite(fp, "%08d %08x %08x\n", minstret, m0.genblk1[CORE0].cpu.MaWb_pc, m0.genblk1[CORE0].cpu.MaWb_ir);
+        if (!m0.rst && !cpu_sim_fini && !m0.gen_cpu[CORE0].cpu.stall && m0.gen_cpu[CORE0].cpu.MaWb_v && !m0.gen_cpu[CORE0].cpu.stall_i) begin
+            $fwrite(fp, "%08d %08x %08x\n", minstret, m0.gen_cpu[CORE0].cpu.MaWb_pc, m0.gen_cpu[CORE0].cpu.MaWb_ir);
             for(i=0;i<4;i=i+1) begin
                 for(j=0;j<8;j=j+1) begin
-                    $fwrite(fp, "%08x",m0.genblk1[CORE0].cpu.xreg.ram[i*8+j]);
+                    $fwrite(fp, "%08x",m0.gen_cpu[CORE0].cpu.xreg.ram[i*8+j]);
                     if(j==7)    $fwrite(fp, "\n");
                     else        $fwrite(fp, " ");
                 end
@@ -90,18 +96,18 @@ module top;
     reg r_rst = 0;
     always @(posedge clk) r_rst <= !m0.rst;
     always @(posedge clk) if (r_rst) begin
-        $write(" %06d: %x ", minstret, m0.genblk1[CORE0].cpu.r_pc);
-        if (m0.genblk1[CORE0].cpu.IfId_v) $write("%x ", m0.genblk1[CORE0].cpu.IfId_pc); else $write("-------- ");
-        if (m0.genblk1[CORE0].cpu.IdEx_v) $write("%x", m0.genblk1[CORE0].cpu.IdEx_pc); else $write("--------");
-        if (m0.genblk1[CORE0].cpu.IdEx_v && m0.genblk1[CORE0].cpu.IdEx_bru_ctrl[0]) begin
-          if(m0.genblk1[CORE0].cpu.IdEx_bru_ctrl[7:6]) $write("(J) "); else $write("(B) ");
+        $write(" %06d: %x ", minstret, m0.gen_cpu[CORE0].cpu.r_pc);
+        if (m0.gen_cpu[CORE0].cpu.IfId_v) $write("%x ", m0.gen_cpu[CORE0].cpu.IfId_pc); else $write("-------- ");
+        if (m0.gen_cpu[CORE0].cpu.IdEx_v) $write("%x", m0.gen_cpu[CORE0].cpu.IdEx_pc); else $write("--------");
+        if (m0.gen_cpu[CORE0].cpu.IdEx_v && m0.gen_cpu[CORE0].cpu.IdEx_bru_ctrl[0]) begin
+          if(m0.gen_cpu[CORE0].cpu.IdEx_bru_ctrl[7:6]) $write("(J) "); else $write("(B) ");
         end
         else $write("( ) ");
-        if (m0.genblk1[CORE0].cpu.ExMa_v) $write("%x ", m0.genblk1[CORE0].cpu.ExMa_pc); else $write("-------- ");
-        if (m0.genblk1[CORE0].cpu.MaWb_v) $write("%x:", m0.genblk1[CORE0].cpu.MaWb_pc); else $write("--------:");
-        if (m0.genblk1[CORE0].cpu.ExMa_v && m0.genblk1[CORE0].cpu.ExMa_is_ctrl_tsfr) begin
+        if (m0.gen_cpu[CORE0].cpu.ExMa_v) $write("%x ", m0.gen_cpu[CORE0].cpu.ExMa_pc); else $write("-------- ");
+        if (m0.gen_cpu[CORE0].cpu.MaWb_v) $write("%x:", m0.gen_cpu[CORE0].cpu.MaWb_pc); else $write("--------:");
+        if (m0.gen_cpu[CORE0].cpu.ExMa_v && m0.gen_cpu[CORE0].cpu.ExMa_is_ctrl_tsfr) begin
             $write(" JB_in_Ma:");
-            if (m0.genblk1[CORE0].cpu.ExMa_is_ctrl_tsfr && m0.genblk1[CORE0].cpu.Ma_br_misp)
+            if (m0.gen_cpu[CORE0].cpu.ExMa_is_ctrl_tsfr && m0.gen_cpu[CORE0].cpu.Ma_br_misp)
               $write(" miss"); else $write(" hit");
         end
 
