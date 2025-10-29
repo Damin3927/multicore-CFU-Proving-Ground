@@ -46,6 +46,10 @@ module main (
     wire [3:0]  dmem_wstrb[0:`NCORES-1];
     wire [31:0] dmem_rdata[0:`NCORES-1];
 
+    wire        vmem_we   [0:`NCORES-1];
+    wire [31:0] vmem_addr [0:`NCORES-1];
+    wire [31:0] vmem_wdata[0:`NCORES-1];
+
     // Pack arrays for dbus_dmem module
     wire [`NCORES-1:0] dmem_re_packed;
     wire [`NCORES-1:0] dmem_we_packed;
@@ -54,6 +58,12 @@ module main (
     wire [4*`NCORES-1:0] dmem_wstrb_packed;
     wire [32*`NCORES-1:0] dmem_rdata_packed;
     wire [`NCORES-1:0] dbus_stall_packed;
+
+    // Pack arrays for dbus_vmem module
+    wire [`NCORES-1:0] vmem_we_packed;
+    wire [32*`NCORES-1:0] vmem_addr_packed;
+    wire [32*`NCORES-1:0] vmem_wdata_packed;
+    wire [`NCORES-1:0] vmem_stall_packed;
 
     genvar pack_idx;
     generate
@@ -64,13 +74,13 @@ module main (
             assign dmem_wdata_packed[32*(pack_idx+1)-1:32*pack_idx] = dmem_wdata[pack_idx];
             assign dmem_wstrb_packed[4*(pack_idx+1)-1:4*pack_idx] = dmem_wstrb[pack_idx];
             assign dmem_rdata[pack_idx] = dmem_rdata_packed[32*(pack_idx+1)-1:32*pack_idx];
-            assign dbus_stall[pack_idx] = dbus_stall_packed[pack_idx];
+            assign dbus_stall[pack_idx] = dbus_stall_packed[pack_idx] | vmem_stall_packed[pack_idx];
+
+            assign vmem_we_packed[pack_idx] = vmem_we[pack_idx];
+            assign vmem_addr_packed[32*(pack_idx+1)-1:32*pack_idx] = vmem_addr[pack_idx];
+            assign vmem_wdata_packed[32*(pack_idx+1)-1:32*pack_idx] = vmem_wdata[pack_idx];
         end
     endgenerate
-
-    wire        vmem_we     = dbus_we[0] & (dbus_addr[0][29]);
-    wire [15:0] vmem_addr   = dbus_addr[0][15:0];
-    wire [2:0]  vmem_wdata  = dbus_wdata[0][2:0];
 
     genvar i;
     generate
@@ -97,7 +107,7 @@ module main (
 
             wire [31:0] perf_rdata;
             assign dbus_rdata[i] = (rdata_sel == 2'd0) ? dmem_rdata[i] :
-                                   (rdata_sel == 2'd1) ? 0 :  // unused for vmem
+                                   (rdata_sel == 2'd1) ? 0 :  // vmem is write-only for CPUs
                                    (rdata_sel == 2'd2) ? perf_rdata :
                                    (rdata_sel == 2'd3) ? hart_rdata[i] : 0;
             cpu cpu (
@@ -121,6 +131,10 @@ module main (
             assign dmem_addr[i]   = rdata_sel_next == 2'd0 ? dbus_addr[i] : 0;
             assign dmem_wdata[i]  = rdata_sel_next == 2'd0 ? dbus_wdata[i] : 0;
             assign dmem_wstrb[i]  = rdata_sel_next == 2'd0 ? dbus_wstrb[i] : 0;
+
+            assign vmem_we[i]     = rdata_sel_next == 2'd1 ? dbus_we[i] & (dbus_addr[i][29]) : 0;
+            assign vmem_addr[i]   = rdata_sel_next == 2'd1 ? dbus_addr[i] : 0;
+            assign vmem_wdata[i]  = rdata_sel_next == 2'd1 ? dbus_wdata[i] : 0;
 
             wire perf_we = dbus_we[i] & (dbus_addr[i][30]) & (!dbus_addr[i][12]);
             wire [3:0] perf_addr = dbus_addr[i][3:0];
@@ -170,26 +184,28 @@ module main (
         .stall_packed_o(dbus_stall_packed)   // output wire [NCORES-1:0]
     );
 
-    wire [15:0] vmem_raddr;
-    wire  [2:0] vmem_rdata_t;
-    vmem vmem (
-        .clk_i   (clk),          // input wire
-        .we_i    (vmem_we),      // input wire
-        .waddr_i (vmem_addr),    // input wire [15:0]
-        .wdata_i (vmem_wdata),   // input wire [15:0]
-        .raddr_i (vmem_raddr),   // input wire [15:0]
-        .rdata_o (vmem_rdata_t)  // output wire [15:0]
+    wire [15:0] vmem_disp_raddr;
+    wire  [2:0] vmem_disp_rdata_t;
+    wire [15:0] vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
+
+    dbus_vmem dbus_vmem (
+        .clk_i          (clk),                // input  wire
+        .we_packed_i    (vmem_we_packed),     // input  wire [NCORES-1:0]
+        .addr_packed_i  (vmem_addr_packed),   // input  wire [32*NCORES-1:0]
+        .wdata_packed_i (vmem_wdata_packed),  // input  wire [32*NCORES-1:0]
+        .stall_packed_o (vmem_stall_packed),  // output wire [NCORES-1:0]
+        .disp_raddr_i   (vmem_disp_raddr),    // input  wire [15:0]
+        .disp_rdata_o   (vmem_disp_rdata_t)   // output wire [2:0]
     );
 
-    wire [15:0] vmem_rdata = {{5{vmem_rdata_t[2]}}, {6{vmem_rdata_t[1]}}, {5{vmem_rdata_t[0]}}};
     m_st7789_disp st7789_disp (
-        .w_clk      (clk),         // input  wire
-        .st7789_SDA (st7789_SDA),  // output wire
-        .st7789_SCL (st7789_SCL),  // output wire
-        .st7789_DC  (st7789_DC),   // output wire
-        .st7789_RES (st7789_RES),  // output wire
-        .w_raddr    (vmem_raddr),  // output wire [15:0]
-        .w_rdata    (vmem_rdata)   // input  wire [15:0]
+        .w_clk      (clk),               // input  wire
+        .st7789_SDA (st7789_SDA),        // output wire
+        .st7789_SCL (st7789_SCL),        // output wire
+        .st7789_DC  (st7789_DC),         // output wire
+        .st7789_RES (st7789_RES),        // output wire
+        .w_raddr    (vmem_disp_raddr),   // output wire [15:0]
+        .w_rdata    (vmem_disp_rdata)    // input  wire [15:0]
     );
 
 endmodule
@@ -452,6 +468,126 @@ module m_dmem (
         if (reb_i) rdatab <= dmem[valid_addrb];
     end
     assign rdatab_o = rdatab;
+endmodule
+
+module dbus_vmem #(
+    parameter NCORES = `NCORES
+) (
+    input wire clk_i,
+    input wire [NCORES-1:0] we_packed_i,
+    input wire [32*NCORES-1:0] addr_packed_i,
+    input wire [32*NCORES-1:0] wdata_packed_i,
+    output wire [NCORES-1:0] stall_packed_o,
+    input wire [15:0] disp_raddr_i,
+    output wire [2:0] disp_rdata_o
+);
+    // Round-robin arbiter for multi-core vmem access
+    genvar i;
+
+    // Unpack input arrays
+    wire        we   [0:NCORES-1];
+    wire [31:0] addr [0:NCORES-1];
+    wire [31:0] wdata[0:NCORES-1];
+    wire        stall[0:NCORES-1];
+    reg         stall_o   [0:NCORES-1];
+
+    generate
+        for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
+            assign we[i]    = we_packed_i[i];
+            assign addr[i]  = addr_packed_i[32*(i+1)-1:32*i];
+            assign wdata[i] = wdata_packed_i[32*(i+1)-1:32*i];
+            assign stall_packed_o[i] = stall_o[i];
+        end
+    endgenerate
+
+    integer j;
+    always @(posedge clk_i) begin
+        for (j = 0; j < NCORES; j = j + 1) begin
+            stall_o[j] <= stall[j];
+        end
+    end
+
+    // Reserved request registers for each core
+    reg        req_valid [0:NCORES-1];  // request is pending
+    reg        req_we [0:NCORES-1];
+    reg [31:0] req_addr [0:NCORES-1];
+    reg [31:0] req_wdata [0:NCORES-1];
+
+    // Round-robin state
+    reg [$clog2(NCORES)-1:0] rr_ptr = 0;  // points to next core to serve
+
+    // Select one core to service this cycle (single-port)
+    reg [$clog2(NCORES)-1:0] sel_core;
+    reg sel_valid;
+
+    // Reserve incoming requests - all requests go through the buffer
+    always @(posedge clk_i) begin : reserve_requests_block
+        for (j = 0; j < NCORES; j = j + 1) begin
+            // Set valid if new request arrives
+            if (!req_valid[j]) begin
+                req_valid[j] <= addr[j] != 32'h0;  // new request
+                req_we[j]    <= we[j];
+                req_addr[j]  <= addr[j];
+                req_wdata[j] <= wdata[j];
+            end else if (being_served[j]) begin
+                // Clear valid when being served
+                req_valid[j] <= 1'b0;
+                req_we[j]    <= 1'b0;
+                req_addr[j]  <= 32'h0;
+                req_wdata[j] <= 32'h0;
+            end
+        end
+    end
+
+    generate
+        for (i = 0; i < NCORES; i = i + 1) begin : gen_output
+            assign stall[i] = (addr[i] != 0) // new request arrives
+                            || (req_valid[i]); // pending request
+        end
+    endgenerate
+
+    // Combinational logic to select core in round-robin fashion
+    integer k;
+    always @(*) begin : select_core_block
+        sel_valid = 1'b0;
+        sel_core = 0;
+
+        // Find first pending request starting from rr_ptr
+        for (k = 0; k < NCORES; k = k + 1) begin
+            if (req_valid[(rr_ptr + k) % NCORES] && !sel_valid) begin
+                sel_core = (rr_ptr + k) % NCORES;
+                sel_valid = 1'b1;
+            end
+        end
+    end
+
+    // Track which core is currently being served
+    wire being_served [0:NCORES-1];
+    generate
+        for (i = 0; i < NCORES; i = i + 1) begin : gen_being_served
+            assign being_served[i] = sel_valid && sel_core == i;
+        end
+    endgenerate
+
+    wire we_int          = sel_valid && req_we[sel_core];
+    wire [15:0] addr_int = sel_valid ? req_addr[sel_core][15:0] : 16'h0;
+    wire [2:0]  wdata_int = sel_valid ? req_wdata[sel_core][2:0] : 3'h0;
+
+    // Update round-robin pointer
+    always @(posedge clk_i) begin
+        if (sel_valid) begin
+            rr_ptr <= (sel_core + 1) % NCORES;
+        end
+    end
+
+    vmem vmem (
+        .clk_i   (clk_i),         // input  wire
+        .we_i    (we_int),        // input  wire
+        .waddr_i (addr_int),      // input  wire [15:0]
+        .wdata_i (wdata_int),     // input  wire [2:0]
+        .raddr_i (disp_raddr_i),  // input  wire [15:0]
+        .rdata_o (disp_rdata_o)   // output wire [2:0]
+    );
 endmodule
 
 module perf_cntr (

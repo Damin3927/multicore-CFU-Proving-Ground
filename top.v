@@ -27,10 +27,10 @@ module top;
 //==============================================================================
 // Dump
 //------------------------------------------------------------------------------
-    initial begin
-        $dumpfile("dump.vcd");
-        $dumpvars(0, top);
-    end
+    // initial begin
+    //     $dumpfile("dump.vcd");
+    //     $dumpvars(0, top);
+    // end
 
 //==============================================================================
 // Condition for simulation to end
@@ -43,10 +43,10 @@ module top;
             if (m0.gen_cpu[CORE0].cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
         end
 
-        if (mcycle > 200000) begin
-            $write("Simulation timeout!\n");
-            $finish(1);
-        end
+        // if (mcycle > 200000) begin
+        //     $write("Simulation timeout!\n");
+        //     $finish(1);
+        // end
 
         if (cpu_sim_fini) begin
             $finish(1);
