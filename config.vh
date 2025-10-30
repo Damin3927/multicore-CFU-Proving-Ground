@@ -10,6 +10,9 @@
 // LCD Display
 `define LCD_ROTATE 0 // 0: 0 degree, 1: 90 degree, 2: 180 degree, 3: 270 degree (Left Rotate)
 
+// CFU
+`define USE_HLS
+
 // cpu
 `define CLK_FREQ_MHZ 140  // operating clock frequency in MHz
 

@@ -4,12 +4,13 @@
 #include "st7789.h"
 #include "util.h"
 
-// #define USE_HLS
+#define USE_HLS
 
 #define NCORES 4       // number of cores
 #define X_PIX  240     // display width
 #define Y_PIX  240     // display height
 #define ROWS_PER_CORE (Y_PIX / NCORES)
+#define ITER_MAX 256
 
 // Shared variables
 volatile float x_min = 0.270851;
@@ -47,10 +48,9 @@ void mandelbrot(int start_row, int end_row)
         float y = y_min + j * dy;
 
         for (int i = 1; i <= X_PIX; i++) {
-            int k;
+            int k = 0;
             float x = x_min + i * dx;
 #ifdef USE_HLS
-            
             cfu_op(
                 0,
                 0,
@@ -63,7 +63,7 @@ void mandelbrot(int start_row, int end_row)
             float v  = 0.0;
             float u2 = 0.0;
             float v2 = 0.0;
-            for (k = 1; k < 256; k++) {
+            for (k = 1; k < ITER_MAX; k++) {
                 v = 2 * u * v + y;
                 u = u2 - v2 + x;
                 u2 = u * u;
@@ -79,7 +79,7 @@ void mandelbrot(int start_row, int end_row)
 int main()
 {
     int hart_id = pg_hart_id();
-    
+
     // Calculate row range for this hart
     int start_row = hart_id * ROWS_PER_CORE + 1;
     int end_row = (hart_id + 1) * ROWS_PER_CORE;
