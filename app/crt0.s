@@ -40,10 +40,10 @@ _start:
     li      x31, 0
     li      t0, 0x40001000
     lw      t1, 0(t0)
-    li      t2, 0x00100000
+    li      t2, 0x00000400
     mul     t1, t1, t2
     la      sp, _fstack
-    add     sp, sp, t1
+    sub     sp, sp, t1
     jal     main
     j       finish
 
