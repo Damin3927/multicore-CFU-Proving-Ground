@@ -184,11 +184,11 @@ module main (
                 end
                 
                 // Any write from another core to the reserved address invalidates the reservation
-                // This includes stores from other cores
+                // Compare word-aligned addresses (ignore lower 2 bits)
                 if (reservation_valid[lr_sc_idx]) begin
                     for (other_idx = 0; other_idx < `NCORES; other_idx = other_idx + 1) begin
                         if (other_idx != lr_sc_idx && dbus_we[other_idx] && 
-                            dbus_addr[other_idx] == reservation_addr[lr_sc_idx]) begin
+                            dbus_addr[other_idx][31:2] == reservation_addr[lr_sc_idx][31:2]) begin
                             reservation_valid[lr_sc_idx] <= 0;
                         end
                     end
@@ -198,11 +198,12 @@ module main (
     end
     
     // SC success logic
+    // Compare word-aligned addresses (ignore lower 2 bits for word accesses)
     genvar sc_idx;
     generate
         for (sc_idx = 0; sc_idx < `NCORES; sc_idx = sc_idx + 1) begin : gen_sc_success
             assign sc_success[sc_idx] = reservation_valid[sc_idx] && 
-                                       (dbus_addr[sc_idx] == reservation_addr[sc_idx]);
+                                       (dbus_addr[sc_idx][31:2] == reservation_addr[sc_idx][31:2]);
         end
     endgenerate
 
