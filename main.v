@@ -82,6 +82,11 @@ module main (
         end
     endgenerate
 
+    // LR/SC signals
+    wire lr_sig [0:`NCORES-1];
+    wire sc_sig [0:`NCORES-1];
+    wire sc_success [0:`NCORES-1];
+    
     genvar i;
     generate
         for (i = 0; i < `NCORES; i = i + 1) begin : gen_cpu
@@ -121,7 +126,10 @@ module main (
                 .dbus_wdata_o (dbus_wdata[i]),  // output wire [`DBUS_DATA_WIDTH-1:0]
                 .dbus_wstrb_o (dbus_wstrb[i]),  // output wire [`DBUS_STRB_WIDTH-1:0]
                 .dbus_rdata_i (dbus_rdata[i]),  // input  wire [`DBUS_DATA_WIDTH-1:0]
-                .hart_index   (i)               // input  wire
+                .hart_index   (i),              // input  wire
+                .lr_o         (lr_sig[i]),      // output wire
+                .sc_o         (sc_sig[i]),      // output wire
+                .sc_success_i (sc_success[i])   // input  wire
             );
 
             assign hart_rdata[i] = i;
@@ -146,6 +154,55 @@ module main (
                 .w_en_i (perf_we),     // input  wire
                 .rdata_o(perf_rdata)   // output wire [31:0]
             );
+        end
+    endgenerate
+
+    // LR/SC reservation logic
+    // Each core can have at most one reservation at a time
+    reg                reservation_valid [0:`NCORES-1];
+    reg [31:0]         reservation_addr  [0:`NCORES-1];
+    
+    integer lr_sc_idx, other_idx;
+    always @(posedge clk) begin
+        if (rst) begin
+            for (lr_sc_idx = 0; lr_sc_idx < `NCORES; lr_sc_idx = lr_sc_idx + 1) begin
+                reservation_valid[lr_sc_idx] <= 0;
+                reservation_addr[lr_sc_idx]  <= 0;
+            end
+        end else begin
+            for (lr_sc_idx = 0; lr_sc_idx < `NCORES; lr_sc_idx = lr_sc_idx + 1) begin
+                // LR: Set reservation for this core
+                if (lr_sig[lr_sc_idx]) begin
+                    reservation_valid[lr_sc_idx] <= 1;
+                    reservation_addr[lr_sc_idx]  <= dbus_addr[lr_sc_idx];
+                end
+                
+                // SC: Check if reservation is valid
+                // Reservation is cleared regardless of success
+                if (sc_sig[lr_sc_idx]) begin
+                    reservation_valid[lr_sc_idx] <= 0;
+                end
+                
+                // Any write from another core to the reserved address invalidates the reservation
+                // This includes stores from other cores
+                if (reservation_valid[lr_sc_idx]) begin
+                    for (other_idx = 0; other_idx < `NCORES; other_idx = other_idx + 1) begin
+                        if (other_idx != lr_sc_idx && dbus_we[other_idx] && 
+                            dbus_addr[other_idx] == reservation_addr[lr_sc_idx]) begin
+                            reservation_valid[lr_sc_idx] <= 0;
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    // SC success logic
+    genvar sc_idx;
+    generate
+        for (sc_idx = 0; sc_idx < `NCORES; sc_idx = sc_idx + 1) begin : gen_sc_success
+            assign sc_success[sc_idx] = reservation_valid[sc_idx] && 
+                                       (dbus_addr[sc_idx] == reservation_addr[sc_idx]);
         end
     endgenerate
 
