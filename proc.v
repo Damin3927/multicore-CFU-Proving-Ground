@@ -331,6 +331,7 @@ module cpu (
         .src1_i       (Ex_src1),        // input  wire           [`XLEN-1:0]
         .src2_i       (Ex_src2),        // input  wire           [`XLEN-1:0]
         .imm_i        (IdEx_imm),       // input  wire           [`XLEN-1:0]
+        .sc_success_i (sc_success_i),   // input  wire
         .dbus_addr_o  (dbus_addr_o),    // output wire           [`XLEN-1:0]
         .dbus_offset_o(dbus_offset),    // output wire    [OFFSET_WIDTH-1:0]
         .dbus_wvalid_o(dbus_wvalid_o),  // output wire
@@ -737,6 +738,7 @@ module store_unit (
     input  wire [31:0] src1_i,
     input  wire [31:0] src2_i,
     input  wire [31:0] imm_i,
+    input  wire        sc_success_i,
     output wire [31:0] dbus_addr_o,
     output wire [ 1:0] dbus_offset_o,
     output wire        dbus_wvalid_o,
@@ -755,7 +757,9 @@ module store_unit (
                                         lsu_ctrl_i[`LSU_CTRL_IS_LOAD])) ? 
                            ((w_is_lr || w_is_sc) ? src1_i : src1_i + imm_i) : 0;
     assign dbus_offset_o = dbus_addr_o[1:0];
-    assign dbus_wvalid_o = valid_i && lsu_ctrl_i[`LSU_CTRL_IS_STORE];
+    // SC only writes if reservation is valid (sc_success_i)
+    assign dbus_wvalid_o = valid_i && lsu_ctrl_i[`LSU_CTRL_IS_STORE] && 
+                           (!w_is_sc || sc_success_i);
     assign lr_o = valid_i && w_is_lr;
     assign sc_o = valid_i && w_is_sc;
 
