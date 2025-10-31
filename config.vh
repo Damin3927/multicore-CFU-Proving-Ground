@@ -103,7 +103,9 @@
 `define LSU_CTRL_IS_BYTE 3
 `define LSU_CTRL_IS_HALFWORD 4
 `define LSU_CTRL_IS_WORD 5
-`define LSU_CTRL_WIDTH 6
+`define LSU_CTRL_IS_LR 6
+`define LSU_CTRL_IS_SC 7
+`define LSU_CTRL_WIDTH 8
 
 // perf control
 `define PERF_CTRL_IS_CYCLE 0
