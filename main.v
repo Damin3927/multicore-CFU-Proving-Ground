@@ -354,7 +354,9 @@ module dbus_dmem #(
 
         // Find second pending request (different from first)
         for (m = 0; m < NCORES; m = m + 1) begin
-            if (req_valid[(rr_ptr + m) % NCORES] && !sel_valid_b && ((rr_ptr + m) % NCORES) != sel_core_a) begin
+            if (req_valid[(rr_ptr + m) % NCORES] && !sel_valid_b &&
+                ((rr_ptr + m) % NCORES) != sel_core_a &&
+                (req_addr[sel_core_a][31:2] != req_addr[(rr_ptr + m) % NCORES][31:2])) begin
                 sel_core_b = (rr_ptr + m) % NCORES;
                 sel_valid_b = 1'b1;
             end

@@ -10,9 +10,6 @@
 // LCD Display
 `define LCD_ROTATE 0 // 0: 0 degree, 1: 90 degree, 2: 180 degree, 3: 270 degree (Left Rotate)
 
-// CFU
-`define USE_HLS
-
 // cpu
 `define CLK_FREQ_MHZ 140  // operating clock frequency in MHz
 
@@ -20,7 +17,9 @@
 
 `define BTB_ENTRY (2*1024)  // the number of BTB entries for branch prediction
 
-`define NCORES 4 // the number of cores
+`ifndef NCORES
+`define NCORES 4
+`endif
 
 // ram
 `define IMEM_SIZE (32*1024) // instruction memory size in byte

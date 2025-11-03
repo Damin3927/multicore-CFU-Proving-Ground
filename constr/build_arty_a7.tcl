@@ -4,23 +4,34 @@
 set top_dir [pwd]
 set proj_name main
 set part_name xc7a35tcsg324-1
-set src_files [concat [list $top_dir/proc.v $top_dir/cfu.v $top_dir/main.v] [glob -nocomplain $top_dir/cfu/*.v]]
-set tcl_files [glob -nocomplain $top_dir/cfu/*.tcl]
+set src_files [list $top_dir/proc.v $top_dir/cfu.v $top_dir/main.v]
 set nproc [exec nproc]
 
 set file [open "$top_dir/config.vh"]
-if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} [read $file] -> freq]} {
+set config_content [read $file]
+close $file
+
+if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} $config_content -> freq]} {
     puts "Found frequency: $freq MHz"
 } else {
     puts "CLK_FREQ_MHZ not found in config.vh"
-    close $file
     exit 1
 }
-close $file
+
+# Extract NCORES from config.vh, default to 4 if not found
+if {[regexp {`define\s+NCORES\s+(\d+)} $config_content -> ncores]} {
+    puts "Found NCORES: $ncores"
+} else {
+    set ncores 4
+    puts "NCORES not found in config.vh, using default: $ncores"
+}
 
 create_project -force $proj_name $top_dir/vivado -part $part_name
 set_property strategy Flow_PerfOptimized_high [get_runs synth_1]
 set_property strategy Performance_ExplorePostRoutePhysOpt [get_runs impl_1]
+
+# Set NCORES define
+set_property verilog_define [list "NCORES=$ncores"] [get_filesets sources_1]
 
 for {set i 0} {$i < $argc} {incr i} {
     if {[lindex $argv $i] eq "--hls"} {
@@ -28,7 +39,7 @@ for {set i 0} {$i < $argc} {incr i} {
         set src_files [concat $src_files [glob -nocomplain $top_dir/cfu/*.v]]
         set tcl_files [glob -nocomplain $top_dir/cfu/*.tcl]
         foreach tcl_file $tcl_files {source $tcl_file}
-        set_property verilog_define {USE_HLS} [get_filesets  sources_1]
+        set_property verilog_define [list "NCORES=$ncores" "USE_HLS"] [get_filesets sources_1]
         update_compile_order -fileset sources_1
         break;
     }
@@ -51,10 +62,6 @@ set_property -dict [list \
 
 generate_target all [get_files  $top_dir/vivado/$proj_name.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.xci]
 create_ip_run [get_ips clk_wiz_0]
-
-foreach tcl_file $tcl_files {
-    source $tcl_file
-}
 
 update_compile_order -fileset sources_1
 launch_runs impl_1 -to_step write_bitstream -jobs $nproc
