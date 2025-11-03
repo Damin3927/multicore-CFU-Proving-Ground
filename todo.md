@@ -1,0 +1,2 @@
+- Make other harts perceive that there're other store operations in at least before 1 cycle past (by defining registers that will be up during store operations?)
+- If more than one store ops start at the same cycle, prioritize one of them and stall others

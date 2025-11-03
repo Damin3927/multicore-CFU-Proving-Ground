@@ -85,8 +85,8 @@ module main (
     // LR/SC signals
     wire lr_sig [0:`NCORES-1];
     wire sc_sig [0:`NCORES-1];
-    wire sc_success [0:`NCORES-1];
-    
+    reg sc_success [0:`NCORES-1];
+
     genvar i;
     generate
         for (i = 0; i < `NCORES; i = i + 1) begin : gen_cpu
@@ -161,7 +161,7 @@ module main (
     // Each core can have at most one reservation at a time
     reg                reservation_valid [0:`NCORES-1];
     reg [31:0]         reservation_addr  [0:`NCORES-1];
-    
+
     integer lr_sc_idx, other_idx;
     always @(posedge clk) begin
         if (rst) begin
@@ -176,36 +176,37 @@ module main (
                     reservation_valid[lr_sc_idx] <= 1;
                     reservation_addr[lr_sc_idx]  <= dbus_addr[lr_sc_idx];
                 end
-                
+
                 // SC: Check if reservation is valid
                 // Reservation is cleared regardless of success
                 if (sc_sig[lr_sc_idx]) begin
                     reservation_valid[lr_sc_idx] <= 0;
                 end
-                
+
                 // Any write from another core to the reserved address invalidates the reservation
                 // Compare word-aligned addresses (ignore lower 2 bits)
-                if (reservation_valid[lr_sc_idx]) begin
-                    for (other_idx = 0; other_idx < `NCORES; other_idx = other_idx + 1) begin
-                        if (other_idx != lr_sc_idx && dbus_we[other_idx] && 
-                            dbus_addr[other_idx][31:2] == reservation_addr[lr_sc_idx][31:2]) begin
-                            reservation_valid[lr_sc_idx] <= 0;
-                        end
+                for (other_idx = 0; other_idx < `NCORES; other_idx = other_idx + 1) begin
+                    if (other_idx != lr_sc_idx && dbus_we[other_idx] && dbus_addr[other_idx][31:2] == reservation_addr[lr_sc_idx][31:2]) begin
+                        reservation_valid[lr_sc_idx] <= 0;
                     end
                 end
             end
         end
     end
-    
-    // SC success logic
-    // Compare word-aligned addresses (ignore lower 2 bits for word accesses)
-    genvar sc_idx;
-    generate
-        for (sc_idx = 0; sc_idx < `NCORES; sc_idx = sc_idx + 1) begin : gen_sc_success
-            assign sc_success[sc_idx] = reservation_valid[sc_idx] && 
-                                       (dbus_addr[sc_idx][31:2] == reservation_addr[sc_idx][31:2]);
+
+    always @(posedge clk) begin
+        // SC success logic
+        for (lr_sc_idx = 0; lr_sc_idx < `NCORES; lr_sc_idx = lr_sc_idx + 1) begin
+            if (!dbus_stall[lr_sc_idx]) begin
+                if (sc_sig[lr_sc_idx]) begin
+                    sc_success[lr_sc_idx] <= reservation_valid[lr_sc_idx] &&
+                                            (dbus_addr[lr_sc_idx][31:2] == reservation_addr[lr_sc_idx][31:2]);
+                end else begin
+                    sc_success[lr_sc_idx] <= 0;
+                end
+            end
         end
-    endgenerate
+    end
 
     genvar imem_idx;
     generate

@@ -754,11 +754,11 @@ module store_unit (
     wire w_is_lr = lsu_ctrl_i[`LSU_CTRL_IS_LR];
     wire w_is_sc = lsu_ctrl_i[`LSU_CTRL_IS_SC];
     assign dbus_addr_o   = (valid_i && (lsu_ctrl_i[`LSU_CTRL_IS_STORE] ||
-                                        lsu_ctrl_i[`LSU_CTRL_IS_LOAD])) ? 
+                                        lsu_ctrl_i[`LSU_CTRL_IS_LOAD])) ?
                            ((w_is_lr || w_is_sc) ? src1_i : src1_i + imm_i) : 0;
     assign dbus_offset_o = dbus_addr_o[1:0];
     // SC only writes if reservation is valid (sc_success_i)
-    assign dbus_wvalid_o = valid_i && lsu_ctrl_i[`LSU_CTRL_IS_STORE] && 
+    assign dbus_wvalid_o = valid_i && lsu_ctrl_i[`LSU_CTRL_IS_STORE] &&
                            (!w_is_sc || sc_success_i);
     assign lr_o = valid_i && w_is_lr;
     assign sc_o = valid_i && w_is_sc;
@@ -807,7 +807,7 @@ module load_unit (
                            (w_lh && ost[1]==1) ? d[31:24] : (w_lb_sign) ? 8'hff : 0;
     assign w3 = (w_load == 0) ? 0 : (w_lw) ? d[23:16] : ((w_lb_sign) || (w_lh_sign)) ? 8'hff : 0;
     assign w4 = (w_load == 0) ? 0 : (w_lw) ? d[31:24] : ((w_lb_sign) || (w_lh_sign)) ? 8'hff : 0;
-    
+
     // For SC instruction, return 0 for success, 1 for failure
     wire [31:0] load_rslt = {w4, w3, w2, w1};
     wire [31:0] sc_rslt = sc_success_i ? 32'h0 : 32'h1;

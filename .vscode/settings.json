@@ -1,0 +1,3 @@
+{
+    "C_Cpp.default.compilerPath": "/tools/cad/riscv/rv32ima/bin/riscv32-unknown-elf-gcc"
+}
