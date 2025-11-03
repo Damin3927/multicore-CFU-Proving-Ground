@@ -16,9 +16,10 @@ int main()
 
     shared_var = hart_id;
 
-    pg_lcd_set_pos(0, hart_id);
-    pg_lcd_prints("Hart ID: ");
-    pg_lcd_printd(hart_id);
+    if (hart_id == 0) {
+        pg_lcd_prints("Shared Variable Test: ");
+        pg_lcd_printd(shared_var);
+    }
 
     while (1);
 
