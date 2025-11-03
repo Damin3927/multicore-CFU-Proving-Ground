@@ -19,12 +19,12 @@ USE_HLS ?= 0
 all: prog build
 
 build:
-	$(RTLSIM) --binary --trace --top-module top --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top *.v cfu/*.v
+	$(RTLSIM) --binary --trace --top-module top $(if $(filter 1,$(USE_HLS)),-DUSE_HLS -Icfu --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top *.v
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
 	mkdir -p build
-	$(GCC) -Os -march=rv32im -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld -o build/main.elf app/crt0.s app/*.c *.c
+	$(GCC) -Os -march=rv32im -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c
 	make initf
 
 imem_size =	$(shell grep -oP "\`define\s+IMEM_SIZE\s+\(\K[^)]*" config.vh | bc)
@@ -64,7 +64,6 @@ run:
 drun:
 	./obj_dir/top | build/dispemu 1
 
-TCL_ARG := $(if $(ifeq ($(USE_HLS),1)),--hls,)
 bit:
 	@if [ ! -f memi.txt ] || [ ! -f memd.txt ]; then \
 		echo "Please run 'make prog' first."; \
@@ -74,7 +73,7 @@ bit:
 		echo "Plese run 'make init' first."; \
 		exit 1; \
 	fi
-	$(VIVADO) -mode batch -source build.tcl -tclargs $(TCL_ARG)
+	$(VIVADO) -mode batch -source build.tcl $(if $(filter 1,$(USE_HLS)),-tclargs --hls)
 	cp vivado/main.runs/impl_1/main.bit build/.
 	@if [ -f vivado/main.runs/impl_i/main.ltx ]; then \
 		cp -f vivado/main.runs/impl_i/main.ltx build/.; \
@@ -95,15 +94,15 @@ vpp:
 	cp vitis/hls/impl/verilog/*.tcl cfu/.
 
 hls-sim:
-	make prog
-	$(RTLSIM) --binary --trace --top-module top -DUSE_HLS -Icfu --Wno-TIMESCALEMOD --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top *.v
+	make prog USE_HLS=1
+	make build USE_HLS=1
 
 init:
 	cp constr/$(TARGET).xdc main.xdc
 	cp constr/build_$(TARGET).tcl build.tcl
 
 clean:
-	rm -rf obj_dir rvcpu-32im* vivado* .Xil
+	rm -rf obj_dir rvcpu-32im* vivado* .Xil cfu
 
 reset-hard:
-	rm -rf obj_dir build rvcpu-32im* sample1.txt vivado* .Xil build.tcl main.xdc
+	rm -rf obj_dir build rvcpu-32im* sample1.txt vivado* .Xil build.tcl main.xdc cfu
