@@ -14,17 +14,18 @@ TARGET := arty_a7
 #TARGET := nexys_a7
 
 USE_HLS ?= 0
+NCORES ?= 4
 
 .PHONY: build prog run clean
 all: prog build
 
 build:
-	$(RTLSIM) --binary --trace --top-module top $(if $(filter 1,$(USE_HLS)),-DUSE_HLS -Icfu --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top *.v
+	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS -Icfu --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top *.v
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
 	mkdir -p build
-	$(GCC) -Os -march=rv32im -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c
+	$(GCC) -Os -march=rv32im -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c
 	make initf
 
 imem_size =	$(shell grep -oP "\`define\s+IMEM_SIZE\s+\(\K[^)]*" config.vh | bc)

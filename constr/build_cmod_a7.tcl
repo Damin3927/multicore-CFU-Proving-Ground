@@ -8,18 +8,30 @@ set src_files [list $top_dir/config.vh $top_dir/proc.v $top_dir/cfu.v $top_dir/m
 set nproc [exec nproc]
 
 set file [open "$top_dir/config.vh"]
-if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} [read $file] -> freq]} {
+set config_content [read $file]
+close $file
+
+if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} $config_content -> freq]} {
     puts "Found frequency: $freq MHz"
 } else {
     puts "CLK_FREQ_MHZ not found in config.vh"
-    close $file
     exit 1
 }
-close $file
+
+# Extract NCORES from config.vh, default to 4 if not found
+if {[regexp {`define\s+NCORES\s+(\d+)} $config_content -> ncores]} {
+    puts "Found NCORES: $ncores"
+} else {
+    set ncores 4
+    puts "NCORES not found in config.vh, using default: $ncores"
+}
 
 create_project -force $proj_name $top_dir/vivado -part $part_name
 set_property strategy Flow_PerfOptimized_high [get_runs synth_1]
 set_property strategy Performance_ExplorePostRoutePhysOpt [get_runs impl_1]
+
+# Set NCORES define
+set_property verilog_define [list "NCORES=$ncores"] [get_filesets sources_1]
 
 add_files -force -scan_for_includes $src_files
 add_files -fileset constrs_1 $top_dir/main.xdc

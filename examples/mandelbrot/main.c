@@ -4,7 +4,10 @@
 #include "st7789.h"
 #include "util.h"
 
+#ifndef NCORES
 #define NCORES 4       // number of cores
+#endif
+
 #define X_PIX  240     // display width
 #define Y_PIX  240     // display height
 #define ROWS_PER_CORE (Y_PIX / NCORES)

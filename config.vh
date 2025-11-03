@@ -17,7 +17,9 @@
 
 `define BTB_ENTRY (2*1024)  // the number of BTB entries for branch prediction
 
-`define NCORES 4 // the number of cores
+`ifndef NCORES
+`define NCORES 4
+`endif
 
 // ram
 `define IMEM_SIZE (32*1024) // instruction memory size in byte
