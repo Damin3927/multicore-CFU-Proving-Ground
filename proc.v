@@ -17,6 +17,8 @@ module cpu (
     output wire                        dbus_wvalid_o,
     output wire [`DBUS_DATA_WIDTH-1:0] dbus_wdata_o,
     output wire [`DBUS_STRB_WIDTH-1:0] dbus_wstrb_o,
+    output wire                        dbus_is_lr_o,
+    output wire                        dbus_is_sc_o,
     input  wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata_i,
     input  wire                        hart_index
 );
@@ -163,7 +165,8 @@ module cpu (
                               && (Id_lsu_ctrl[`LSU_CTRL_IS_LOAD] ||
                                   Id_mul_ctrl[`MUL_CTRL_IS_MUL] ||
                                   Id_div_ctrl[`DIV_CTRL_IS_DIV] ||
-                                  Id_cfu_ctrl[`CFU_CTRL_IS_CFU]  )
+                                  Id_cfu_ctrl[`CFU_CTRL_IS_CFU] ||
+                                  Id_lsu_ctrl[`LSU_CTRL_IS_SC]  )
                               && IfId_rf_we && ((IfId_rd==If_rs1) || (IfId_rd==If_rs2));
 
     always @(posedge clk_i) if (!w_stall) begin
@@ -332,7 +335,9 @@ module cpu (
         .dbus_offset_o(dbus_offset),    // output wire    [OFFSET_WIDTH-1:0]
         .dbus_wvalid_o(dbus_wvalid_o),  // output wire
         .dbus_wdata_o (dbus_wdata_o),   // output wire           [`XLEN-1:0]
-        .dbus_wstrb_o (dbus_wstrb_o)    // output wire         [`XBYTES-1:0]
+        .dbus_wstrb_o (dbus_wstrb_o),   // output wire         [`XBYTES-1:0]
+        .dbus_is_lr_o (dbus_is_lr_o),   // output wire
+        .dbus_is_sc_o (dbus_is_sc_o)    // output wire
     );
 
     ///// multiplier unit
@@ -501,6 +506,7 @@ module pre_decoder (
         (opcode == 5'b01000) ? `S_TYPE :  // STORE
         (opcode == 5'b00100) ? `I_TYPE :  // OP-IMM
         (opcode == 5'b01100) ? `R_TYPE :  // OP
+        (opcode == 5'b01011) ? `R_TYPE :  // AMO
         (opcode == 5'b00010) ? `R_TYPE : `NONE_TYPE;  // CUSTOM-0 : NONE
 
     assign rd_o = ((instr_type_o == `S_TYPE) | (instr_type_o == `B_TYPE)) ? 0 : ir_i[11:7];
@@ -725,22 +731,32 @@ endmodule
 
 /******************************************************************************************/
 module store_unit (
-    input  wire        valid_i,
-    input  wire [ 5:0] lsu_ctrl_i,
-    input  wire [31:0] src1_i,
-    input  wire [31:0] src2_i,
-    input  wire [31:0] imm_i,
-    output wire [31:0] dbus_addr_o,
-    output wire [ 1:0] dbus_offset_o,
-    output wire        dbus_wvalid_o,
-    output wire [31:0] dbus_wdata_o,
-    output wire [ 3:0] dbus_wstrb_o
+    input  wire                       valid_i,
+    input  wire [`LSU_CTRL_WIDTH-1:0] lsu_ctrl_i,
+    input  wire [31:0]                src1_i,
+    input  wire [31:0]                src2_i,
+    input  wire [31:0]                imm_i,
+    output wire [31:0]                dbus_addr_o,
+    output wire [ 1:0]                dbus_offset_o,
+    output wire                       dbus_wvalid_o,
+    output wire [31:0]                dbus_wdata_o,
+    output wire [ 3:0]                dbus_wstrb_o,
+    output wire                       dbus_is_lr_o,
+    output wire                       dbus_is_sc_o
 );
 
-    assign dbus_addr_o   = (valid_i && (lsu_ctrl_i[`LSU_CTRL_IS_STORE] ||
-                                        lsu_ctrl_i[`LSU_CTRL_IS_LOAD])) ? src1_i + imm_i : 0;
+    wire is_load  = lsu_ctrl_i[`LSU_CTRL_IS_LOAD];
+    wire is_store = lsu_ctrl_i[`LSU_CTRL_IS_STORE];
+    wire is_lr    = lsu_ctrl_i[`LSU_CTRL_IS_LR];
+    wire is_sc    = lsu_ctrl_i[`LSU_CTRL_IS_SC];
+
+    assign dbus_addr_o = (valid_i && (is_load || is_store))
+                         ? ((is_lr || is_sc) ? src1_i : src1_i + imm_i)
+                         : 0;
     assign dbus_offset_o = dbus_addr_o[1:0];
-    assign dbus_wvalid_o = valid_i && lsu_ctrl_i[`LSU_CTRL_IS_STORE];
+    assign dbus_wvalid_o = valid_i && is_store;
+    assign dbus_is_lr_o  = valid_i && is_lr;
+    assign dbus_is_sc_o  = valid_i && is_sc;
 
     wire w_sb = lsu_ctrl_i[`LSU_CTRL_IS_BYTE];
     wire w_sh = lsu_ctrl_i[`LSU_CTRL_IS_HALFWORD];
@@ -759,10 +775,10 @@ endmodule
 
 /******************************************************************************************/
 module load_unit (
-    input  wire [ 5:0] lsu_ctrl_i,
-    input  wire [ 1:0] dbus_offset_i,
-    input  wire [31:0] dbus_rdata_i,
-    output wire [31:0] rslt_o
+    input  wire [`LSU_CTRL_WIDTH-1:0] lsu_ctrl_i,
+    input  wire [ 1:0]                dbus_offset_i,
+    input  wire [31:0]                dbus_rdata_i,
+    output wire [31:0]                rslt_o
 );
 
     wire w_lb = lsu_ctrl_i[`LSU_CTRL_IS_BYTE];
@@ -770,6 +786,7 @@ module load_unit (
     wire w_lw = lsu_ctrl_i[`LSU_CTRL_IS_WORD];
     wire w_signed = lsu_ctrl_i[`LSU_CTRL_IS_SIGNED];
     wire w_load = lsu_ctrl_i[`LSU_CTRL_IS_LOAD];
+    wire w_sc = lsu_ctrl_i[`LSU_CTRL_IS_SC];
     wire [1:0] ost = dbus_offset_i;  // offset
     wire [31:0] d = dbus_rdata_i;  // data
 
@@ -784,7 +801,9 @@ module load_unit (
                            (w_lh && ost[1]==1) ? d[31:24] : (w_lb_sign) ? 8'hff : 0;
     assign w3 = (w_load == 0) ? 0 : (w_lw) ? d[23:16] : ((w_lb_sign) || (w_lh_sign)) ? 8'hff : 0;
     assign w4 = (w_load == 0) ? 0 : (w_lw) ? d[31:24] : ((w_lb_sign) || (w_lh_sign)) ? 8'hff : 0;
-    assign rslt_o = {w4, w3, w2, w1};
+
+    wire [31:0] load_rslt = {w4, w3, w2, w1};
+    assign rslt_o = (w_sc) ? d : load_rslt;
 endmodule
 
 /******************************************************************************************/
@@ -843,13 +862,15 @@ module decoder (
     wire bru_c7 = (op == 5'b11011) || (op == 5'b11001);  // IS_JAL_JALR
     assign bru_ctrl_o = {bru_c7, bru_c6, bru_c5, bru_c4, bru_c3, bru_c2, bru_c1, bru_c0};
 
-    wire lsu_c0 = (op == 0);  // IS_LOAD
-    wire lsu_c1 = (op == 8);  // IS_STORE
+    wire lsu_c0 = (op == 0) || (op == 5'b01011 && f7[6:2] == 5'b00010);  // IS_LOAD
+    wire lsu_c1 = (op == 8) || (op == 5'b01011 && f7[6:2] == 5'b00011);  // IS_STORE
     wire lsu_c2 = (op == 0 && (f3 == 0 || f3 == 1 || f3 == 2));  // IS_SIGNED
     wire lsu_c3 = (op == 0 && (f3 == 0 || f3 == 4)) || (op == 8 && (f3 == 0));  // BYTE
     wire lsu_c4 = (op == 0 && (f3 == 1 || f3 == 5)) || (op == 8 && (f3 == 1));  // HALFWORD
-    wire lsu_c5 = (op == 0 && (f3 == 2)) || (op == 8 && (f3 == 2));  // WORD
-    assign lsu_ctrl_o = {lsu_c5, lsu_c4, lsu_c3, lsu_c2, lsu_c1, lsu_c0};
+    wire lsu_c5 = (op == 0 && (f3 == 2)) || (op == 8 && (f3 == 2)) || (op == 5'b01011 && f3 == 2);  // WORD
+    wire lsu_c6 = (op == 5'b01011 && f7[6:2] == 5'b00010 && f3 == 2);  // IS_LR
+    wire lsu_c7 = (op == 5'b01011 && f7[6:2] == 5'b00011 && f3 == 2);  // IS_SC
+    assign lsu_ctrl_o = {lsu_c7, lsu_c6, lsu_c5, lsu_c4, lsu_c3, lsu_c2, lsu_c1, lsu_c0};
 
     wire mul_c0 = (op == 12) && (f7 == 1) && (f3 == 0 || f3 == 1 || f3 == 2 || f3 == 3);  // IS_MUL
     wire mul_c1 = (op == 12) && (f7 == 1) && (f3 == 1 || f3 == 2);  // IS_SRC1_SIGNED

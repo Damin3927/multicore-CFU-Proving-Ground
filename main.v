@@ -34,6 +34,8 @@ module main (
     wire [`DBUS_ADDR_WIDTH-1:0] dbus_addr [0:`NCORES-1];
     wire [`DBUS_DATA_WIDTH-1:0] dbus_wdata[0:`NCORES-1];
     wire [`DBUS_STRB_WIDTH-1:0] dbus_wstrb[0:`NCORES-1];
+    wire                        dbus_is_lr[0:`NCORES-1];
+    wire                        dbus_is_sc[0:`NCORES-1];
     wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata[0:`NCORES-1];
     wire                        dbus_stall[0:`NCORES-1];
 
@@ -56,6 +58,8 @@ module main (
     wire [32*`NCORES-1:0] dmem_addr_packed;
     wire [32*`NCORES-1:0] dmem_wdata_packed;
     wire [4*`NCORES-1:0] dmem_wstrb_packed;
+    wire [`NCORES-1:0] dmem_is_lr_packed;
+    wire [`NCORES-1:0] dmem_is_sc_packed;
     wire [32*`NCORES-1:0] dmem_rdata_packed;
     wire [`NCORES-1:0] dbus_stall_packed;
 
@@ -73,6 +77,8 @@ module main (
             assign dmem_addr_packed[32*(pack_idx+1)-1:32*pack_idx] = dmem_addr[pack_idx];
             assign dmem_wdata_packed[32*(pack_idx+1)-1:32*pack_idx] = dmem_wdata[pack_idx];
             assign dmem_wstrb_packed[4*(pack_idx+1)-1:4*pack_idx] = dmem_wstrb[pack_idx];
+            assign dmem_is_lr_packed[pack_idx] = dbus_is_lr[pack_idx];
+            assign dmem_is_sc_packed[pack_idx] = dbus_is_sc[pack_idx];
             assign dmem_rdata[pack_idx] = dmem_rdata_packed[32*(pack_idx+1)-1:32*pack_idx];
             assign dbus_stall[pack_idx] = dbus_stall_packed[pack_idx] | vmem_stall_packed[pack_idx];
 
@@ -120,6 +126,8 @@ module main (
                 .dbus_wvalid_o(dbus_we[i]),     // output wire
                 .dbus_wdata_o (dbus_wdata[i]),  // output wire [`DBUS_DATA_WIDTH-1:0]
                 .dbus_wstrb_o (dbus_wstrb[i]),  // output wire [`DBUS_STRB_WIDTH-1:0]
+                .dbus_is_lr_o (dbus_is_lr[i]),  // output wire
+                .dbus_is_sc_o (dbus_is_sc[i]),  // output wire
                 .dbus_rdata_i (dbus_rdata[i]),  // input  wire [`DBUS_DATA_WIDTH-1:0]
                 .hart_index   (i)               // input  wire
             );
@@ -180,6 +188,8 @@ module main (
         .addr_packed_i (dmem_addr_packed),   // input  wire [32*NCORES-1:0]
         .wdata_packed_i(dmem_wdata_packed),  // input  wire [32*NCORES-1:0]
         .wstrb_packed_i(dmem_wstrb_packed),  // input  wire [4*NCORES-1:0]
+        .is_lr_packed_i(dmem_is_lr_packed),  // input  wire [NCORES-1:0]
+        .is_sc_packed_i(dmem_is_sc_packed),  // input  wire [NCORES-1:0]
         .rdata_packed_o(dmem_rdata_packed),  // output wire [32*NCORES-1:0]
         .stall_packed_o(dbus_stall_packed)   // output wire [NCORES-1:0]
     );
@@ -245,6 +255,8 @@ module dbus_dmem #(
     input wire [32*NCORES-1:0] addr_packed_i,
     input wire [32*NCORES-1:0] wdata_packed_i,
     input wire [4*NCORES-1:0] wstrb_packed_i,
+    input wire [NCORES-1:0] is_lr_packed_i,
+    input wire [NCORES-1:0] is_sc_packed_i,
     output wire [32*NCORES-1:0] rdata_packed_o,
     output wire [NCORES-1:0] stall_packed_o
 );
@@ -257,6 +269,8 @@ module dbus_dmem #(
     wire [31:0] addr [0:NCORES-1];
     wire [31:0] wdata[0:NCORES-1];
     wire [3:0]  wstrb[0:NCORES-1];
+    wire        is_lr[0:NCORES-1];
+    wire        is_sc[0:NCORES-1];
     wire [31:0] rdata[0:NCORES-1];
     wire        stall[0:NCORES-1];
     reg  [31:0] rdata_reg [0:NCORES-1];
@@ -269,6 +283,8 @@ module dbus_dmem #(
             assign addr[i]  = addr_packed_i[32*(i+1)-1:32*i];
             assign wdata[i] = wdata_packed_i[32*(i+1)-1:32*i];
             assign wstrb[i] = wstrb_packed_i[4*(i+1)-1:4*i];
+            assign is_lr[i] = is_lr_packed_i[i];
+            assign is_sc[i] = is_sc_packed_i[i];
             assign rdata_packed_o[32*(i+1)-1:32*i] = rdata_reg[i];
             assign stall_packed_o[i] = stall_o[i];
         end
@@ -287,6 +303,8 @@ module dbus_dmem #(
     reg [31:0] req_addr [0:NCORES-1];
     reg [31:0] req_wdata [0:NCORES-1];
     reg [3:0]  req_wstrb [0:NCORES-1];
+    reg        req_is_lr [0:NCORES-1];
+    reg        req_is_sc [0:NCORES-1];
 
     // Round-robin state
     reg [$clog2(NCORES)-1:0] rr_ptr = 0;  // points to next core to serve
@@ -294,8 +312,12 @@ module dbus_dmem #(
     // Select up to 2 cores to service this cycle
     reg [$clog2(NCORES)-1:0] sel_core_a; // first selected core index
     reg [$clog2(NCORES)-1:0] sel_core_b; // second selected core index
+    reg [$clog2(NCORES)-1:0] sel_core_a_logic;
+    reg [$clog2(NCORES)-1:0] sel_core_b_logic;
     reg sel_valid_a;                     // if a port is selected or not
     reg sel_valid_b;                     // if b port is selected or not
+    reg sel_valid_a_logic;
+    reg sel_valid_b_logic;
 
     // Reserve incoming requests - all requests go through the buffer
     integer j;
@@ -309,6 +331,8 @@ module dbus_dmem #(
                 req_addr[j]  <= addr[j];
                 req_wdata[j] <= wdata[j];
                 req_wstrb[j] <= wstrb[j];
+                req_is_lr[j] <= is_lr[j];
+                req_is_sc[j] <= is_sc[j];
             end else if (being_served[j]) begin
                 // Clear valid when being served
                 req_valid[j] <= 1'b0;
@@ -317,6 +341,8 @@ module dbus_dmem #(
                 req_addr[j]  <= 32'h0;
                 req_wdata[j] <= 32'h0;
                 req_wstrb[j] <= 4'h0;
+                req_is_lr[j] <= 1'b0;
+                req_is_sc[j] <= 1'b0;
             end
         end
     end
@@ -325,8 +351,8 @@ module dbus_dmem #(
         for (i = 0; i < NCORES; i = i + 1) begin : gen_output
             assign stall[i] = (addr[i] != 0) // new request arrives
                             || (req_valid[i]); // pending request
-            assign rdata[i] = (resp_valid_a && resp_core_a == i) ? rdataa_dmem :
-                              (resp_valid_b && resp_core_b == i) ? rdatab_dmem : 32'h0;
+            assign rdata[i] = (resp_valid_a && resp_core_a == i) ? (resp_is_sc_a ? {31'b0, !rsvcheck_sc_success[i]} : rdataa_dmem) :
+                              (resp_valid_b && resp_core_b == i) ? (resp_is_sc_b ? {31'b0, !rsvcheck_sc_success[i]} : rdatab_dmem) : 32'h0;
         end
     endgenerate
 
@@ -336,30 +362,46 @@ module dbus_dmem #(
         end
     end
 
-    // Combinational logic to select cores in round-robin fashion
+    // Select cores in round-robin fashion
     integer k, m;
-    always @(*) begin : select_cores_block
-        sel_valid_a = 1'b0;
-        sel_valid_b = 1'b0;
-        sel_core_a = 0;
-        sel_core_b = 0;
+    always @(*) begin
+        sel_valid_a_logic = 1'b0;
+        sel_valid_b_logic = 1'b0;
+        sel_core_a_logic = 0;
+        sel_core_b_logic = 0;
 
         // Find first pending request starting from rr_ptr
         for (k = 0; k < NCORES; k = k + 1) begin
-            if (req_valid[(rr_ptr + k) % NCORES] && !sel_valid_a) begin
-                sel_core_a = (rr_ptr + k) % NCORES;
-                sel_valid_a = 1'b1;
+            if (req_valid[(rr_ptr + k) % NCORES] && !sel_valid_a_logic) begin
+                sel_core_a_logic = (rr_ptr + k) % NCORES;
+                sel_valid_a_logic = 1'b1;
             end
         end
 
         // Find second pending request (different from first)
         for (m = 0; m < NCORES; m = m + 1) begin
-            if (req_valid[(rr_ptr + m) % NCORES] && !sel_valid_b &&
-                ((rr_ptr + m) % NCORES) != sel_core_a &&
-                (req_addr[sel_core_a][31:2] != req_addr[(rr_ptr + m) % NCORES][31:2])) begin
-                sel_core_b = (rr_ptr + m) % NCORES;
-                sel_valid_b = 1'b1;
+            if (req_valid[(rr_ptr + m) % NCORES] && !sel_valid_b_logic &&
+                ((rr_ptr + m) % NCORES) != sel_core_a_logic &&
+                (req_addr[sel_core_a_logic][31:2] != req_addr[(rr_ptr + m) % NCORES][31:2])) begin
+                sel_core_b_logic = (rr_ptr + m) % NCORES;
+                sel_valid_b_logic = 1'b1;
             end
+        end
+    end
+    always @(posedge clk_i) begin
+        sel_core_a <= sel_core_a_logic;
+        sel_core_b <= sel_core_b_logic;
+
+        if (sel_valid_a || rsvcheck_valid_a) begin
+            sel_valid_a <= 1'b0;
+        end else begin
+            sel_valid_a <= sel_valid_a_logic;
+        end
+
+        if (sel_valid_b || rsvcheck_valid_b) begin
+            sel_valid_b <= 1'b0;
+        end else begin
+            sel_valid_b <= sel_valid_b_logic;
         end
     end
 
@@ -367,21 +409,92 @@ module dbus_dmem #(
     wire being_served [0:NCORES-1];
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : gen_being_served
-            assign being_served[i] = (sel_valid_a && sel_core_a == i) || (sel_valid_b && sel_core_b == i);
+            assign being_served[i] = (rsvcheck_valid_a && sel_core_a == i)
+                                  || (rsvcheck_valid_b && sel_core_b == i);
         end
     endgenerate
 
-    // Connect to dmem ports - use buffered requests
-    wire rea_int           = sel_valid_a && req_re[sel_core_a];
-    wire reb_int           = sel_valid_b && req_re[sel_core_b];
-    wire wea_int           = sel_valid_a && req_we[sel_core_a];
-    wire web_int           = sel_valid_b && req_we[sel_core_b];
-    wire [31:0] addra_int  = sel_valid_a ? req_addr[sel_core_a]  : 0;
-    wire [31:0] addrb_int  = sel_valid_b ? req_addr[sel_core_b]  : 0;
-    wire [31:0] wdataa_int = sel_valid_a ? req_wdata[sel_core_a] : 0;
-    wire [31:0] wdatab_int = sel_valid_b ? req_wdata[sel_core_b] : 0;
-    wire [3:0]  wstrba_int = sel_valid_a ? req_wstrb[sel_core_a] : 0;
-    wire [3:0]  wstrbb_int = sel_valid_b ? req_wstrb[sel_core_b] : 0;
+    // LR/SC reservation
+    reg rsvcheck_valid_a;
+    reg rsvcheck_valid_b;
+
+    always @(posedge clk_i) begin
+        if (rsvcheck_valid_a) begin
+            rsvcheck_valid_a <= 1'b0;
+        end else begin
+            rsvcheck_valid_a <= sel_valid_a;
+        end
+
+        if (rsvcheck_valid_b) begin
+            rsvcheck_valid_b <= 1'b0;
+        end else begin
+            rsvcheck_valid_b <= sel_valid_b;
+        end
+    end
+
+    reg        reservation_valid [0:NCORES-1];
+    reg [31:0] reservation_addr  [0:NCORES-1];
+    reg        rsvcheck_sc_success   [0:NCORES-1];
+
+    always @(posedge clk_i) begin
+        // sel_core_a request handling
+        if (sel_valid_a) begin
+            if (req_re[sel_core_a] && req_is_lr[sel_core_a]) begin
+                // set addr to the reservation set
+                reservation_valid[sel_core_a] <= 1'b1;
+                reservation_addr[sel_core_a]  <= req_addr[sel_core_a];
+            end else if (req_we[sel_core_a]) begin
+                // clear reservation if store to the same addr in one of the reservation set
+                for (j = 0; j < NCORES; j = j + 1) begin
+                    if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_a]) begin
+                        reservation_valid[j] <= 1'b0;
+                        reservation_addr[j]  <= 32'h0;
+                    end
+                end
+
+                if (req_is_sc[sel_core_a]) begin
+                    // reservation check result
+                    rsvcheck_sc_success[sel_core_a] <= reservation_valid[sel_core_a] && (reservation_addr[sel_core_a] == req_addr[sel_core_a]);
+                end
+            end
+        end
+
+        // sel_core_b request handling
+        if (sel_valid_b) begin
+            if (req_re[sel_core_b] && req_is_lr[sel_core_b]) begin
+                // set addr to the reservation set
+                reservation_valid[sel_core_b] <= 1'b1;
+                reservation_addr[sel_core_b]  <= req_addr[sel_core_b];
+            end else if (req_we[sel_core_b]) begin
+                // clear reservation if store to the same addr in one of the reservation set
+                for (j = 0; j < NCORES; j = j + 1) begin
+                    if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_b]) begin
+                        reservation_valid[j] <= 1'b0;
+                        reservation_addr[j]  <= 32'h0;
+                    end
+                end
+
+                if (req_is_sc[sel_core_b]) begin
+                    // reservation check result
+                    rsvcheck_sc_success[sel_core_b] <= reservation_valid[sel_core_b] && (reservation_addr[sel_core_b] == req_addr[sel_core_b]);
+                end
+            end
+        end
+    end
+
+    // Connect to dmem ports
+    wire rea_int           = rsvcheck_valid_a && req_re[sel_core_a];
+    wire reb_int           = rsvcheck_valid_b && req_re[sel_core_b];
+    wire wea_int           = rsvcheck_valid_a && req_we[sel_core_a] && (req_is_sc[sel_core_a] ? rsvcheck_sc_success[sel_core_a] : 1'b1);
+    wire web_int           = rsvcheck_valid_b && req_we[sel_core_b] && (req_is_sc[sel_core_b] ? rsvcheck_sc_success[sel_core_b] : 1'b1);
+    wire [31:0] addra_int  = rsvcheck_valid_a ? req_addr[sel_core_a]  : 0;
+    wire [31:0] addrb_int  = rsvcheck_valid_b ? req_addr[sel_core_b]  : 0;
+    wire [31:0] wdataa_int = rsvcheck_valid_a ? req_wdata[sel_core_a] : 0;
+    wire [31:0] wdatab_int = rsvcheck_valid_b ? req_wdata[sel_core_b] : 0;
+    wire [3:0]  wstrba_int = rsvcheck_valid_a ? req_wstrb[sel_core_a] : 0;
+    wire [3:0]  wstrbb_int = rsvcheck_valid_b ? req_wstrb[sel_core_b] : 0;
+    wire is_sc_a           = rsvcheck_valid_a && req_is_sc[sel_core_a];
+    wire is_sc_b           = rsvcheck_valid_b && req_is_sc[sel_core_b];
 
     wire [31:0] rdataa_dmem;
     wire [31:0] rdatab_dmem;
@@ -391,19 +504,23 @@ module dbus_dmem #(
     reg [$clog2(NCORES)-1:0] resp_core_b;
     reg resp_valid_a;
     reg resp_valid_b;
+    reg resp_is_sc_a;
+    reg resp_is_sc_b;
 
     always @(posedge clk_i) begin
         resp_core_a  <= sel_core_a;
         resp_core_b  <= sel_core_b;
-        resp_valid_a <= sel_valid_a;
-        resp_valid_b <= sel_valid_b;
+        resp_valid_a <= rsvcheck_valid_a;
+        resp_valid_b <= rsvcheck_valid_b;
+        resp_is_sc_a <= is_sc_a;
+        resp_is_sc_b <= is_sc_b;
     end
 
     // Update round-robin pointer
     always @(posedge clk_i) begin
-        if (sel_valid_a && sel_valid_b) begin
+        if (rsvcheck_valid_a && rsvcheck_valid_b) begin
             rr_ptr <= (sel_core_b + 1) % NCORES;
-        end else if (sel_valid_a) begin
+        end else if (rsvcheck_valid_a) begin
             rr_ptr <= (sel_core_a + 1) % NCORES;
         end
     end
