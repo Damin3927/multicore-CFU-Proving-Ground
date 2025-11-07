@@ -11,7 +11,7 @@
 `define LCD_ROTATE 0 // 0: 0 degree, 1: 90 degree, 2: 180 degree, 3: 270 degree (Left Rotate)
 
 // cpu
-`define CLK_FREQ_MHZ 140  // operating clock frequency in MHz
+`define CLK_FREQ_MHZ 145  // operating clock frequency in MHz
 
 `define RESET_VECTOR 'h00000000
 
@@ -103,7 +103,9 @@
 `define LSU_CTRL_IS_BYTE 3
 `define LSU_CTRL_IS_HALFWORD 4
 `define LSU_CTRL_IS_WORD 5
-`define LSU_CTRL_WIDTH 6
+`define LSU_CTRL_IS_LR 6
+`define LSU_CTRL_IS_SC 7
+`define LSU_CTRL_WIDTH 8
 
 // perf control
 `define PERF_CTRL_IS_CYCLE 0
