@@ -28,7 +28,9 @@ int main()
     // Hart 0 waits for all cores and displays result
     if (hart_id == 0) {
         // Wait for all cores to finish
-        while (test_results[0] == 0 || test_results[1] == 0 || test_results[2] == 0 || test_results[3] == 0) {}
+        for (int i = 0; i < NCORES; i++) {
+            while (!test_results[i]) {}
+        }
 
         // Display result
         pg_lcd_set_pos(0, 0);
