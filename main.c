@@ -1,4 +1,5 @@
 /* Test program for RV32A LR/SC instructions */
+#include "atomic.h"
 #include "st7789.h"
 #include "util.h"
 
@@ -6,32 +7,19 @@
 #define NCORES 4       // number of cores
 #endif
 
-#define INIT_COUNTER 15
+#define INIT_COUNTER 1
+#define ITERATIONS 100
 
 volatile int shared_counter = INIT_COUNTER;  // Shared counter
 volatile int test_results[NCORES] = {0}; // Test results from each core
-
-void atomic_increment() {
-    int old_val, new_val, ret;
-    do {
-        asm volatile (
-            "lr.w %0, (%2)\n"
-            "addi %1, %0, 1\n"
-            "sc.w %0, %1, (%2)\n"
-            : "=&r"(ret), "=&r"(new_val)
-            : "r"(&shared_counter)
-            : "memory"
-        );
-    } while (ret != 0);
-}
 
 int main()
 {
     int hart_id = pg_hart_id();
 
-    // Each core increments the shared counter 100 times
-    for (int i = 0; i < 100; i++) {
-        atomic_increment();
+    // Each core increments the shared counter ITERATIONS times
+    for (int i = 0; i < ITERATIONS; i++) {
+        atomic_add(&shared_counter, 1);
     }
 
     // Mark this hart as done
@@ -51,8 +39,7 @@ int main()
         pg_lcd_printd(shared_counter);
         pg_lcd_set_pos(0, 3);
 
-        // Expected: 400 (4 cores * 100 increments each)
-        if (shared_counter == NCORES * 100 + INIT_COUNTER) {
+        if (shared_counter == NCORES * ITERATIONS + INIT_COUNTER) {
             pg_lcd_prints("PASS");
         } else {
             pg_lcd_prints("FAIL");

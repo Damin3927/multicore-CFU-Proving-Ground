@@ -389,19 +389,18 @@ module dbus_dmem #(
         end
     end
     always @(posedge clk_i) begin
-        sel_core_a <= sel_core_a_logic;
-        sel_core_b <= sel_core_b_logic;
-
         if (sel_valid_a || rsvcheck_valid_a) begin
             sel_valid_a <= 1'b0;
         end else begin
             sel_valid_a <= sel_valid_a_logic;
+            sel_core_a <= sel_core_a_logic;
         end
 
         if (sel_valid_b || rsvcheck_valid_b) begin
             sel_valid_b <= 1'b0;
-        end else begin
+        end else if (sel_core_b_logic != sel_core_a) begin
             sel_valid_b <= sel_valid_b_logic;
+            sel_core_b <= sel_core_b_logic;
         end
     end
 
@@ -436,6 +435,9 @@ module dbus_dmem #(
     reg [31:0] reservation_addr  [0:NCORES-1];
     reg        rsvcheck_sc_success   [0:NCORES-1];
 
+    wire sc_success_a = reservation_valid[sel_core_a] && (reservation_addr[sel_core_a] == req_addr[sel_core_a]);
+    wire sc_success_b = reservation_valid[sel_core_b] && (reservation_addr[sel_core_b] == req_addr[sel_core_b]);
+
     always @(posedge clk_i) begin
         // sel_core_a request handling
         if (sel_valid_a) begin
@@ -443,18 +445,24 @@ module dbus_dmem #(
                 // set addr to the reservation set
                 reservation_valid[sel_core_a] <= 1'b1;
                 reservation_addr[sel_core_a]  <= req_addr[sel_core_a];
-            end else if (req_we[sel_core_a]) begin
+            end else if (req_we[sel_core_a] && req_is_sc[sel_core_a]) begin
+                rsvcheck_sc_success[sel_core_a] <= sc_success_a;
+                if (sc_success_a) begin
+                    // clear reservation on successful SC
+                    for (j = 0; j < NCORES; j = j + 1) begin
+                        if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_a]) begin
+                            reservation_valid[j] <= 1'b0;
+                            reservation_addr[j]  <= 32'h0;
+                        end
+                    end
+                end
+            end else if (req_we[sel_core_a] && !req_is_sc[sel_core_a]) begin
                 // clear reservation if store to the same addr in one of the reservation set
                 for (j = 0; j < NCORES; j = j + 1) begin
                     if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_a]) begin
                         reservation_valid[j] <= 1'b0;
                         reservation_addr[j]  <= 32'h0;
                     end
-                end
-
-                if (req_is_sc[sel_core_a]) begin
-                    // reservation check result
-                    rsvcheck_sc_success[sel_core_a] <= reservation_valid[sel_core_a] && (reservation_addr[sel_core_a] == req_addr[sel_core_a]);
                 end
             end
         end
@@ -465,18 +473,24 @@ module dbus_dmem #(
                 // set addr to the reservation set
                 reservation_valid[sel_core_b] <= 1'b1;
                 reservation_addr[sel_core_b]  <= req_addr[sel_core_b];
-            end else if (req_we[sel_core_b]) begin
+            end else if (req_we[sel_core_b] && req_is_sc[sel_core_b]) begin
+                rsvcheck_sc_success[sel_core_b] <= sc_success_b;
+                if (sc_success_b) begin
+                    // clear reservation on successful SC
+                    for (j = 0; j < NCORES; j = j + 1) begin
+                        if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_b]) begin
+                            reservation_valid[j] <= 1'b0;
+                            reservation_addr[j]  <= 32'h0;
+                        end
+                    end
+                end
+            end else if (req_we[sel_core_b] && !req_is_sc[sel_core_b]) begin
                 // clear reservation if store to the same addr in one of the reservation set
                 for (j = 0; j < NCORES; j = j + 1) begin
                     if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_b]) begin
                         reservation_valid[j] <= 1'b0;
                         reservation_addr[j]  <= 32'h0;
                     end
-                end
-
-                if (req_is_sc[sel_core_b]) begin
-                    // reservation check result
-                    rsvcheck_sc_success[sel_core_b] <= reservation_valid[sel_core_b] && (reservation_addr[sel_core_b] == req_addr[sel_core_b]);
                 end
             end
         end
@@ -514,13 +528,20 @@ module dbus_dmem #(
         resp_valid_b <= rsvcheck_valid_b;
         resp_is_sc_a <= is_sc_a;
         resp_is_sc_b <= is_sc_b;
+
+        if (resp_valid_a && rsvcheck_sc_success[resp_core_a]) begin
+            rsvcheck_sc_success[resp_core_a] <= 1'b0;
+        end
+        if (resp_valid_b && rsvcheck_sc_success[resp_core_b]) begin
+            rsvcheck_sc_success[resp_core_b] <= 1'b0;
+        end
     end
 
     // Update round-robin pointer
     always @(posedge clk_i) begin
-        if (rsvcheck_valid_a && rsvcheck_valid_b) begin
+        if (sel_valid_a && sel_valid_b) begin
             rr_ptr <= (sel_core_b + 1) % NCORES;
-        end else if (rsvcheck_valid_a) begin
+        end else if (sel_valid_a) begin
             rr_ptr <= (sel_core_a + 1) % NCORES;
         end
     end
