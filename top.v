@@ -3,6 +3,8 @@
 
 `default_nettype none
 
+// `define TIMEOUT_CYCLES 200000
+
 module top;
     reg clk   = 1; always #5 clk <= ~clk;
     reg rst_n = 0; initial #50 rst_n = 1;
@@ -45,10 +47,12 @@ module top;
             if (m0.gen_cpu[CORE0].cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
         end
 
-        // if (mcycle > 200000) begin
-        //     $write("Simulation timeout!\n");
-        //     $finish(1);
-        // end
+`ifdef TIMEOUT_CYCLES
+        if (mcycle >= `TIMEOUT_CYCLES) begin
+            $write("Simulation timeout!\n");
+            $finish(1);
+        end
+`endif
 
         if (cpu_sim_fini) begin
             $finish(1);
