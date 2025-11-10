@@ -195,9 +195,9 @@ module main (
         .stall_packed_o(dbus_stall_packed)   // output wire [NCORES-1:0]
     );
 
-    wire [15:0] vmem_disp_raddr;
-    wire  [2:0] vmem_disp_rdata_t;
-    wire [15:0] vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
+    wire [`VMEM_ADDRW-1:0] vmem_disp_raddr;
+    wire             [2:0] vmem_disp_rdata_t;
+    wire [`VMEM_ADDRW-1:0] vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
 
     dbus_vmem dbus_vmem (
         .clk_i          (clk),                // input  wire
@@ -205,7 +205,7 @@ module main (
         .addr_packed_i  (vmem_addr_packed),   // input  wire [32*NCORES-1:0]
         .wdata_packed_i (vmem_wdata_packed),  // input  wire [32*NCORES-1:0]
         .stall_packed_o (vmem_stall_packed),  // output wire [NCORES-1:0]
-        .disp_raddr_i   (vmem_disp_raddr),    // input  wire [15:0]
+        .disp_raddr_i   (vmem_disp_raddr),    // input  wire [`VMEM_ADDRW-1:0]
         .disp_rdata_o   (vmem_disp_rdata_t)   // output wire [2:0]
     );
 
@@ -215,8 +215,8 @@ module main (
         .st7789_SCL (st7789_SCL),        // output wire
         .st7789_DC  (st7789_DC),         // output wire
         .st7789_RES (st7789_RES),        // output wire
-        .w_raddr    (vmem_disp_raddr),   // output wire [15:0]
-        .w_rdata    (vmem_disp_rdata)    // input  wire [15:0]
+        .w_raddr    (vmem_disp_raddr),   // output wire [`VMEM_ADDRW-1:0]
+        .w_rdata    (vmem_disp_rdata)    // input  wire [`VMEM_ADDRW-1:0]
     );
 
 endmodule
@@ -632,7 +632,7 @@ module dbus_vmem #(
     input wire [32*NCORES-1:0] addr_packed_i,
     input wire [32*NCORES-1:0] wdata_packed_i,
     output wire [NCORES-1:0] stall_packed_o,
-    input wire [15:0] disp_raddr_i,
+    input wire [`VMEM_ADDRW-1:0] disp_raddr_i,
     output wire [2:0] disp_rdata_o
 );
     // Round-robin arbiter for multi-core vmem access
@@ -675,9 +675,9 @@ module dbus_vmem #(
 
     wire being_served [0:NCORES-1];
 
-    wire we_int;
-    wire [15:0] addr_int;
-    wire [2:0]  wdata_int;
+    wire                   we_int;
+    wire [`VMEM_ADDRW-1:0] addr_int;
+    wire             [2:0] wdata_int;
 
     always @(posedge clk_i) begin : reserve_requests_block
         for (j = 0; j < NCORES; j = j + 1) begin
@@ -727,7 +727,7 @@ module dbus_vmem #(
     endgenerate
 
     assign we_int    = sel_valid && req_we[sel_core];
-    assign addr_int  = sel_valid ? req_addr[sel_core][15:0] : 16'h0;
+    assign addr_int  = sel_valid ? req_addr[sel_core][`VMEM_ADDRW-1:0] : 16'h0;
     assign wdata_int = sel_valid ? req_wdata[sel_core][2:0] : 3'h0;
 
     // Update round-robin pointer
@@ -740,9 +740,9 @@ module dbus_vmem #(
     vmem vmem (
         .clk_i   (clk_i),         // input  wire
         .we_i    (we_int),        // input  wire
-        .waddr_i (addr_int),      // input  wire [15:0]
+        .waddr_i (addr_int),      // input  wire [`VMEM_ADDRW-1:0]
         .wdata_i (wdata_int),     // input  wire [2:0]
-        .raddr_i (disp_raddr_i),  // input  wire [15:0]
+        .raddr_i (disp_raddr_i),  // input  wire [`VMEM_ADDRW-1:0]
         .rdata_o (disp_rdata_o)   // output wire [2:0]
     );
 endmodule
@@ -772,27 +772,27 @@ module perf_cntr (
 endmodule
 
 module vmem (
-    input  wire        clk_i,
-    input  wire        we_i,
-    input  wire [15:0] waddr_i,
-    input  wire  [2:0] wdata_i,
-    input  wire [15:0] raddr_i,
-    output wire  [2:0] rdata_o
+    input  wire                   clk_i,
+    input  wire                   we_i,
+    input  wire [`VMEM_ADDRW-1:0] waddr_i,
+    input  wire             [2:0] wdata_i,
+    input  wire [`VMEM_ADDRW-1:0] raddr_i,
+    output wire             [2:0] rdata_o
 );
 
-    reg [2:0] vmem[0:65535];
+    reg [2:0] vmem[0:`VMEM_ENTRIES-1];
     integer i;
     initial begin
-        for (i = 0; i < 65536; i = i + 1) begin
+        for (i = 0; i < `VMEM_ENTRIES; i = i + 1) begin
             vmem[i] = 0;
         end
     end
 
-    reg        we;
-    reg  [2:0] wdata;
-    reg [15:0] waddr;
-    reg [15:0] raddr;
-    reg  [2:0] rdata;
+    reg                   we;
+    reg             [2:0] wdata;
+    reg [`VMEM_ADDRW-1:0] waddr;
+    reg [`VMEM_ADDRW-1:0] raddr;
+    reg             [2:0] rdata;
 
     always @(posedge clk_i) begin
         we    <= we_i;
@@ -810,10 +810,10 @@ module vmem (
     assign rdata_o = rdata;
 
 `ifndef SYNTHESIS
-    reg  [15:0] r_adr_p = 0;
-    reg  [15:0] r_dat_p = 0;
+    reg  [`VMEM_ADDRW-1:0] r_adr_p = 0;
+    reg  [`VMEM_ADDRW-1:0] r_dat_p = 0;
 
-    wire [15:0] data = {{5{wdata_i[2]}}, {6{wdata_i[1]}}, {5{wdata_i[0]}}};
+    wire [`VMEM_ADDRW-1:0] data = {{5{wdata_i[2]}}, {6{wdata_i[1]}}, {5{wdata_i[0]}}};
     always @(posedge clk_i)
         if (we_i) begin
             if (vmem[waddr_i] != wdata_i) begin
@@ -827,13 +827,13 @@ module vmem (
 endmodule
 
 module m_st7789_disp (
-    input  wire        w_clk,  // main clock signal (100MHz)
-    output wire        st7789_SDA,
-    output wire        st7789_SCL,
-    output wire        st7789_DC,
-    output wire        st7789_RES,
-    output wire [15:0] w_raddr,
-    input  wire [15:0] w_rdata
+    input  wire                   w_clk,  // main clock signal (100MHz)
+    output wire                   st7789_SDA,
+    output wire                   st7789_SCL,
+    output wire                   st7789_DC,
+    output wire                   st7789_RES,
+    output wire [`VMEM_ADDRW-1:0] w_raddr,
+    input  wire [`VMEM_ADDRW-1:0] w_rdata
 );
     reg [31:0] r_cnt = 1;
     always @(posedge w_clk) r_cnt <= (r_cnt == 0) ? 0 : r_cnt + 1;
