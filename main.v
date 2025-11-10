@@ -96,26 +96,28 @@ module main (
             // 0x20000000 - 0x2000FFFF (bit[29]=1, bit[30]=0): Video Memory
             // 0x40000000 - 0x40000FFF (bit[30]=1, bit[12]=0): Performance Counter
             // 0x40001000 - 0x40001FFF (bit[30]=1, bit[12]=1): Hart Index
-            wire in_dmem_range = (dbus_addr[i][30:28] == 3'b001);  // 0x1xxxxxxx
-            wire in_vmem_range = (dbus_addr[i][30:28] == 3'b010);  // 0x2xxxxxxx
-            wire in_perf_range = (dbus_addr[i][30:28] == 3'b100) && !dbus_addr[i][12];  // 0x40000xxx
-            wire in_hart_range = (dbus_addr[i][30:28] == 3'b100) && dbus_addr[i][12];   // 0x40001xxx
+            wire in_dmem_range = dbus_addr[i][28];  // 0x1xxxxxxx
+            wire in_vmem_range = dbus_addr[i][29];  // 0x2xxxxxxx
+            wire in_perf_range = dbus_addr[i][30] && !dbus_addr[i][12];  // 0x40000xxx
+            wire in_hart_range = dbus_addr[i][30] && dbus_addr[i][12];   // 0x40001xxx
 
-            wire [1:0] rdata_sel_next = in_dmem_range ? 2'd0 :
-                                        in_vmem_range ? 2'd1 :
-                                        in_perf_range ? 2'd2 :
-                                        in_hart_range ? 2'd3 : 2'd0;
+            reg in_dmem_range_reg;
+            reg in_vmem_range_reg;
+            reg in_perf_range_reg;
+            reg in_hart_range_reg;
 
-            reg [1:0] rdata_sel = 0;
             always @(posedge clk) begin
-                rdata_sel <= rdata_sel_next;
+                in_dmem_range_reg <= in_dmem_range;
+                in_vmem_range_reg <= in_vmem_range;
+                in_perf_range_reg <= in_perf_range;
+                in_hart_range_reg <= in_hart_range;
             end
 
             wire [31:0] perf_rdata;
-            assign dbus_rdata[i] = (rdata_sel == 2'd0) ? dmem_rdata[i] :
-                                   (rdata_sel == 2'd1) ? 0 :  // vmem is write-only for CPUs
-                                   (rdata_sel == 2'd2) ? perf_rdata :
-                                   (rdata_sel == 2'd3) ? hart_rdata[i] : 0;
+            assign dbus_rdata[i] = in_dmem_range_reg ? dmem_rdata[i] :
+                                   in_vmem_range_reg ? 0 :  // vmem is write-only for CPUs
+                                   in_perf_range_reg ? perf_rdata :
+                                   in_hart_range_reg ? hart_rdata[i] : dmem_rdata[i];
             cpu cpu (
                 .clk_i        (clk),            // input  wire
                 .rst_i        (rst),            // input  wire
@@ -134,18 +136,17 @@ module main (
 
             assign hart_rdata[i] = i;
 
-            assign dmem_re[i]     = rdata_sel_next == 2'd0 ? !dbus_we[i] & (dbus_addr[i][28]) : 0;
-            assign dmem_we[i]     = rdata_sel_next == 2'd0 ? dbus_we[i] & (dbus_addr[i][28]) : 0;
-            assign dmem_addr[i]   = rdata_sel_next == 2'd0 ? dbus_addr[i] : 0;
-            assign dmem_wdata[i]  = rdata_sel_next == 2'd0 ? dbus_wdata[i] : 0;
-            assign dmem_wstrb[i]  = rdata_sel_next == 2'd0 ? dbus_wstrb[i] : 0;
+            assign dmem_re[i]    = in_dmem_range & !dbus_we[i];
+            assign dmem_we[i]    = in_dmem_range & dbus_we[i];
+            assign dmem_addr[i]  = in_dmem_range ? dbus_addr[i] : 0;
+            assign dmem_wdata[i] = in_dmem_range ? dbus_wdata[i] : 0;
+            assign dmem_wstrb[i] = in_dmem_range ? dbus_wstrb[i] : 0;
+            assign vmem_we[i]    = in_vmem_range & dbus_we[i];
+            assign vmem_addr[i]  = in_vmem_range ? dbus_addr[i] : 0;
+            assign vmem_wdata[i] = in_vmem_range ? dbus_wdata[i] : 0;
 
-            assign vmem_we[i]     = rdata_sel_next == 2'd1 ? dbus_we[i] & (dbus_addr[i][29]) : 0;
-            assign vmem_addr[i]   = rdata_sel_next == 2'd1 ? dbus_addr[i] : 0;
-            assign vmem_wdata[i]  = rdata_sel_next == 2'd1 ? dbus_wdata[i] : 0;
-
-            wire perf_we = dbus_we[i] & (dbus_addr[i][30]) & (!dbus_addr[i][12]);
-            wire [3:0] perf_addr = dbus_addr[i][3:0];
+            wire perf_we          = in_perf_range & dbus_we[i];
+            wire [3:0] perf_addr  = dbus_addr[i][3:0];
             wire [2:0] perf_wdata = dbus_wdata[i][2:0];
             perf_cntr perf (
                 .clk_i  (clk),         // input  wire
@@ -194,9 +195,9 @@ module main (
         .stall_packed_o(dbus_stall_packed)   // output wire [NCORES-1:0]
     );
 
-    wire [15:0] vmem_disp_raddr;
-    wire  [2:0] vmem_disp_rdata_t;
-    wire [15:0] vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
+    wire [`VMEM_ADDRW-1:0] vmem_disp_raddr;
+    wire             [2:0] vmem_disp_rdata_t;
+    wire [`VMEM_ADDRW-1:0] vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
 
     dbus_vmem dbus_vmem (
         .clk_i          (clk),                // input  wire
@@ -204,7 +205,7 @@ module main (
         .addr_packed_i  (vmem_addr_packed),   // input  wire [32*NCORES-1:0]
         .wdata_packed_i (vmem_wdata_packed),  // input  wire [32*NCORES-1:0]
         .stall_packed_o (vmem_stall_packed),  // output wire [NCORES-1:0]
-        .disp_raddr_i   (vmem_disp_raddr),    // input  wire [15:0]
+        .disp_raddr_i   (vmem_disp_raddr),    // input  wire [`VMEM_ADDRW-1:0]
         .disp_rdata_o   (vmem_disp_rdata_t)   // output wire [2:0]
     );
 
@@ -214,8 +215,8 @@ module main (
         .st7789_SCL (st7789_SCL),        // output wire
         .st7789_DC  (st7789_DC),         // output wire
         .st7789_RES (st7789_RES),        // output wire
-        .w_raddr    (vmem_disp_raddr),   // output wire [15:0]
-        .w_rdata    (vmem_disp_rdata)    // input  wire [15:0]
+        .w_raddr    (vmem_disp_raddr),   // output wire [`VMEM_ADDRW-1:0]
+        .w_rdata    (vmem_disp_rdata)    // input  wire [`VMEM_ADDRW-1:0]
     );
 
 endmodule
@@ -262,6 +263,7 @@ module dbus_dmem #(
 );
     // Round-robin arbiter for multi-core dmem access
     genvar i;
+    integer j, k, m;
 
     // Unpack input arrays
     wire        re   [0:NCORES-1];
@@ -319,8 +321,43 @@ module dbus_dmem #(
     reg sel_valid_a_logic;
     reg sel_valid_b_logic;
 
-    // Reserve incoming requests - all requests go through the buffer
-    integer j;
+    wire being_served [0:NCORES-1];
+
+    reg rsvcheck_valid_a;
+    reg rsvcheck_valid_b;
+
+    // LR/SC reservation
+    reg        reservation_valid   [0:NCORES-1];
+    reg [31:0] reservation_addr    [0:NCORES-1];
+    reg        rsvcheck_sc_success [0:NCORES-1];
+
+    wire sc_success_a;
+    wire sc_success_b;
+
+    wire rea_int;
+    wire reb_int;
+    wire wea_int;
+    wire web_int;
+    wire [31:0] addra_int;
+    wire [31:0] addrb_int;
+    wire [31:0] wdataa_int;
+    wire [31:0] wdatab_int;
+    wire [3:0]  wstrba_int;
+    wire [3:0]  wstrbb_int;
+    wire is_sc_a;
+    wire is_sc_b;
+
+    wire [31:0] rdataa_dmem;
+    wire [31:0] rdatab_dmem;
+
+    reg [$clog2(NCORES)-1:0] resp_core_a;
+    reg [$clog2(NCORES)-1:0] resp_core_b;
+    reg resp_valid_a;
+    reg resp_valid_b;
+    reg resp_is_sc_a;
+    reg resp_is_sc_b;
+
+    // Reserve incoming requests
     always @(posedge clk_i) begin : reserve_requests_block
         for (j = 0; j < NCORES; j = j + 1) begin
             // Set valid if new request arrives
@@ -363,7 +400,6 @@ module dbus_dmem #(
     end
 
     // Select cores in round-robin fashion
-    integer k, m;
     always @(*) begin
         sel_valid_a_logic = 1'b0;
         sel_valid_b_logic = 1'b0;
@@ -404,18 +440,12 @@ module dbus_dmem #(
         end
     end
 
-    // Track which cores are currently being served (data will be ready next cycle)
-    wire being_served [0:NCORES-1];
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : gen_being_served
             assign being_served[i] = (rsvcheck_valid_a && sel_core_a == i)
                                   || (rsvcheck_valid_b && sel_core_b == i);
         end
     endgenerate
-
-    // LR/SC reservation
-    reg rsvcheck_valid_a;
-    reg rsvcheck_valid_b;
 
     always @(posedge clk_i) begin
         if (rsvcheck_valid_a) begin
@@ -431,12 +461,8 @@ module dbus_dmem #(
         end
     end
 
-    reg        reservation_valid [0:NCORES-1];
-    reg [31:0] reservation_addr  [0:NCORES-1];
-    reg        rsvcheck_sc_success   [0:NCORES-1];
-
-    wire sc_success_a = reservation_valid[sel_core_a] && (reservation_addr[sel_core_a] == req_addr[sel_core_a]);
-    wire sc_success_b = reservation_valid[sel_core_b] && (reservation_addr[sel_core_b] == req_addr[sel_core_b]);
+    assign sc_success_a = reservation_valid[sel_core_a] && (reservation_addr[sel_core_a] == req_addr[sel_core_a]);
+    assign sc_success_b = reservation_valid[sel_core_b] && (reservation_addr[sel_core_b] == req_addr[sel_core_b]);
 
     always @(posedge clk_i) begin
         // sel_core_a request handling
@@ -496,30 +522,18 @@ module dbus_dmem #(
         end
     end
 
-    // Connect to dmem ports
-    wire rea_int           = rsvcheck_valid_a && req_re[sel_core_a];
-    wire reb_int           = rsvcheck_valid_b && req_re[sel_core_b];
-    wire wea_int           = rsvcheck_valid_a && req_we[sel_core_a] && (req_is_sc[sel_core_a] ? rsvcheck_sc_success[sel_core_a] : 1'b1);
-    wire web_int           = rsvcheck_valid_b && req_we[sel_core_b] && (req_is_sc[sel_core_b] ? rsvcheck_sc_success[sel_core_b] : 1'b1);
-    wire [31:0] addra_int  = rsvcheck_valid_a ? req_addr[sel_core_a]  : 0;
-    wire [31:0] addrb_int  = rsvcheck_valid_b ? req_addr[sel_core_b]  : 0;
-    wire [31:0] wdataa_int = rsvcheck_valid_a ? req_wdata[sel_core_a] : 0;
-    wire [31:0] wdatab_int = rsvcheck_valid_b ? req_wdata[sel_core_b] : 0;
-    wire [3:0]  wstrba_int = rsvcheck_valid_a ? req_wstrb[sel_core_a] : 0;
-    wire [3:0]  wstrbb_int = rsvcheck_valid_b ? req_wstrb[sel_core_b] : 0;
-    wire is_sc_a           = rsvcheck_valid_a && req_is_sc[sel_core_a];
-    wire is_sc_b           = rsvcheck_valid_b && req_is_sc[sel_core_b];
-
-    wire [31:0] rdataa_dmem;
-    wire [31:0] rdatab_dmem;
-
-    // Pipeline for tracking which core's data is coming
-    reg [$clog2(NCORES)-1:0] resp_core_a;
-    reg [$clog2(NCORES)-1:0] resp_core_b;
-    reg resp_valid_a;
-    reg resp_valid_b;
-    reg resp_is_sc_a;
-    reg resp_is_sc_b;
+    assign rea_int    = rsvcheck_valid_a && req_re[sel_core_a];
+    assign reb_int    = rsvcheck_valid_b && req_re[sel_core_b];
+    assign wea_int    = rsvcheck_valid_a && req_we[sel_core_a] && (req_is_sc[sel_core_a] ? rsvcheck_sc_success[sel_core_a] : 1'b1);
+    assign web_int    = rsvcheck_valid_b && req_we[sel_core_b] && (req_is_sc[sel_core_b] ? rsvcheck_sc_success[sel_core_b] : 1'b1);
+    assign addra_int  = rsvcheck_valid_a ? req_addr[sel_core_a]  : 0;
+    assign addrb_int  = rsvcheck_valid_b ? req_addr[sel_core_b]  : 0;
+    assign wdataa_int = rsvcheck_valid_a ? req_wdata[sel_core_a] : 0;
+    assign wdatab_int = rsvcheck_valid_b ? req_wdata[sel_core_b] : 0;
+    assign wstrba_int = rsvcheck_valid_a ? req_wstrb[sel_core_a] : 0;
+    assign wstrbb_int = rsvcheck_valid_b ? req_wstrb[sel_core_b] : 0;
+    assign is_sc_a    = rsvcheck_valid_a && req_is_sc[sel_core_a];
+    assign is_sc_b    = rsvcheck_valid_b && req_is_sc[sel_core_b];
 
     always @(posedge clk_i) begin
         resp_core_a  <= sel_core_a;
@@ -618,7 +632,7 @@ module dbus_vmem #(
     input wire [32*NCORES-1:0] addr_packed_i,
     input wire [32*NCORES-1:0] wdata_packed_i,
     output wire [NCORES-1:0] stall_packed_o,
-    input wire [15:0] disp_raddr_i,
+    input wire [`VMEM_ADDRW-1:0] disp_raddr_i,
     output wire [2:0] disp_rdata_o
 );
     // Round-robin arbiter for multi-core vmem access
@@ -656,11 +670,15 @@ module dbus_vmem #(
     // Round-robin state
     reg [$clog2(NCORES)-1:0] rr_ptr = 0;  // points to next core to serve
 
-    // Select one core to service this cycle (single-port)
     reg [$clog2(NCORES)-1:0] sel_core;
     reg sel_valid;
 
-    // Reserve incoming requests - all requests go through the buffer
+    wire being_served [0:NCORES-1];
+
+    wire                   we_int;
+    wire [`VMEM_ADDRW-1:0] addr_int;
+    wire             [2:0] wdata_int;
+
     always @(posedge clk_i) begin : reserve_requests_block
         for (j = 0; j < NCORES; j = j + 1) begin
             // Set valid if new request arrives
@@ -681,7 +699,7 @@ module dbus_vmem #(
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : gen_output
-            assign stall[i] = (addr[i] != 0) // new request arrives
+            assign stall[i] = (addr[i] != 32'h0) // new request arrives
                             || (req_valid[i]); // pending request
         end
     endgenerate
@@ -702,16 +720,15 @@ module dbus_vmem #(
     end
 
     // Track which core is currently being served
-    wire being_served [0:NCORES-1];
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : gen_being_served
             assign being_served[i] = sel_valid && sel_core == i;
         end
     endgenerate
 
-    wire we_int          = sel_valid && req_we[sel_core];
-    wire [15:0] addr_int = sel_valid ? req_addr[sel_core][15:0] : 16'h0;
-    wire [2:0]  wdata_int = sel_valid ? req_wdata[sel_core][2:0] : 3'h0;
+    assign we_int    = sel_valid && req_we[sel_core];
+    assign addr_int  = sel_valid ? req_addr[sel_core][`VMEM_ADDRW-1:0] : 16'h0;
+    assign wdata_int = sel_valid ? req_wdata[sel_core][2:0] : 3'h0;
 
     // Update round-robin pointer
     always @(posedge clk_i) begin
@@ -723,9 +740,9 @@ module dbus_vmem #(
     vmem vmem (
         .clk_i   (clk_i),         // input  wire
         .we_i    (we_int),        // input  wire
-        .waddr_i (addr_int),      // input  wire [15:0]
+        .waddr_i (addr_int),      // input  wire [`VMEM_ADDRW-1:0]
         .wdata_i (wdata_int),     // input  wire [2:0]
-        .raddr_i (disp_raddr_i),  // input  wire [15:0]
+        .raddr_i (disp_raddr_i),  // input  wire [`VMEM_ADDRW-1:0]
         .rdata_o (disp_rdata_o)   // output wire [2:0]
     );
 endmodule
@@ -755,27 +772,27 @@ module perf_cntr (
 endmodule
 
 module vmem (
-    input  wire        clk_i,
-    input  wire        we_i,
-    input  wire [15:0] waddr_i,
-    input  wire  [2:0] wdata_i,
-    input  wire [15:0] raddr_i,
-    output wire  [2:0] rdata_o
+    input  wire                   clk_i,
+    input  wire                   we_i,
+    input  wire [`VMEM_ADDRW-1:0] waddr_i,
+    input  wire             [2:0] wdata_i,
+    input  wire [`VMEM_ADDRW-1:0] raddr_i,
+    output wire             [2:0] rdata_o
 );
 
-    reg [2:0] vmem[0:65535];
+    reg [2:0] vmem[0:`VMEM_ENTRIES-1];
     integer i;
     initial begin
-        for (i = 0; i < 65536; i = i + 1) begin
+        for (i = 0; i < `VMEM_ENTRIES; i = i + 1) begin
             vmem[i] = 0;
         end
     end
 
-    reg        we;
-    reg  [2:0] wdata;
-    reg [15:0] waddr;
-    reg [15:0] raddr;
-    reg  [2:0] rdata;
+    reg                   we;
+    reg             [2:0] wdata;
+    reg [`VMEM_ADDRW-1:0] waddr;
+    reg [`VMEM_ADDRW-1:0] raddr;
+    reg             [2:0] rdata;
 
     always @(posedge clk_i) begin
         we    <= we_i;
@@ -793,10 +810,10 @@ module vmem (
     assign rdata_o = rdata;
 
 `ifndef SYNTHESIS
-    reg  [15:0] r_adr_p = 0;
-    reg  [15:0] r_dat_p = 0;
+    reg  [`VMEM_ADDRW-1:0] r_adr_p = 0;
+    reg  [`VMEM_ADDRW-1:0] r_dat_p = 0;
 
-    wire [15:0] data = {{5{wdata_i[2]}}, {6{wdata_i[1]}}, {5{wdata_i[0]}}};
+    wire [`VMEM_ADDRW-1:0] data = {{5{wdata_i[2]}}, {6{wdata_i[1]}}, {5{wdata_i[0]}}};
     always @(posedge clk_i)
         if (we_i) begin
             if (vmem[waddr_i] != wdata_i) begin
@@ -810,13 +827,13 @@ module vmem (
 endmodule
 
 module m_st7789_disp (
-    input  wire        w_clk,  // main clock signal (100MHz)
-    output wire        st7789_SDA,
-    output wire        st7789_SCL,
-    output wire        st7789_DC,
-    output wire        st7789_RES,
-    output wire [15:0] w_raddr,
-    input  wire [15:0] w_rdata
+    input  wire                   w_clk,  // main clock signal (100MHz)
+    output wire                   st7789_SDA,
+    output wire                   st7789_SCL,
+    output wire                   st7789_DC,
+    output wire                   st7789_RES,
+    output wire [`VMEM_ADDRW-1:0] w_raddr,
+    input  wire [`VMEM_ADDRW-1:0] w_rdata
 );
     reg [31:0] r_cnt = 1;
     always @(posedge w_clk) r_cnt <= (r_cnt == 0) ? 0 : r_cnt + 1;

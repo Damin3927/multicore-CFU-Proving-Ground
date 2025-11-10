@@ -24,12 +24,15 @@
 // ram
 `define IMEM_SIZE (32*1024) // instruction memory size in byte
 `define DMEM_SIZE (16*1024) // data memory size in byte
+`define VMEM_SIZE (64*1024) // video memory size in byte
 
 `define IMEM_ENTRIES (`IMEM_SIZE/4)
 `define DMEM_ENTRIES (`DMEM_SIZE/4)
+`define VMEM_ENTRIES `VMEM_SIZE
 
 `define IMEM_ADDRW ($clog2(`IMEM_ENTRIES))
 `define DMEM_ADDRW ($clog2(`DMEM_ENTRIES))
+`define VMEM_ADDRW ($clog2(`VMEM_ENTRIES))
 
 // uart
 `ifndef BAUD_RATE
