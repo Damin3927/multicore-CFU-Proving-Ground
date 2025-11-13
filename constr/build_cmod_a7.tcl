@@ -18,17 +18,33 @@ if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} $config_content -> freq]} {
     exit 1
 }
 
-# Extract NCORES from config.vh, default to 4 if not found
-if {[regexp {`define\s+NCORES\s+(\d+)} $config_content -> ncores]} {
-    puts "Found NCORES: $ncores"
-} else {
-    set ncores 4
-    puts "NCORES not found in config.vh, using default: $ncores"
-}
+# Default NCORES value
+set ncores 4
 
 create_project -force $proj_name $top_dir/vivado -part $part_name
 set_property strategy Flow_PerfOptimized_high [get_runs synth_1]
 set_property strategy Performance_ExplorePostRoutePhysOpt [get_runs impl_1]
+
+# Parse command-line arguments
+for {set i 0} {$i < $argc} {incr i} {
+    if {[lindex $argv $i] eq "--ncores"} {
+        incr i
+        if {$i < $argc} {
+            set ncores [lindex $argv $i]
+            puts "NCORES set to: $ncores"
+        } else {
+            puts "Error: --ncores requires a value"
+            exit 1
+        }
+    } elseif {[lindex $argv $i] eq "--hls"} {
+        puts "HLS mode enabled. Adding HLS source files."
+        set src_files [concat $src_files [glob -nocomplain $top_dir/cfu/*.v]]
+        set tcl_files [glob -nocomplain $top_dir/cfu/*.tcl]
+        foreach tcl_file $tcl_files {source $tcl_file}
+        set_property verilog_define [list "NCORES=$ncores" "USE_HLS"] [get_filesets sources_1]
+        update_compile_order -fileset sources_1
+    }
+}
 
 # Set NCORES define
 set_property verilog_define [list "NCORES=$ncores"] [get_filesets sources_1]
