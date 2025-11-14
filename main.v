@@ -247,6 +247,68 @@ module m_imem (
     assign rdatab_o = rdatab;
 endmodule
 
+module dual_issue_arbiter #(
+    parameter NCORES = `NCORES,
+    parameter ADDR_WIDTH = 32
+) (
+    input wire    [$clog2(NCORES)-1:0] rr_ptr_i,
+    input wire            [NCORES-1:0] req_valid_i,
+    input wire [NCORES*ADDR_WIDTH-1:0] req_addr_packed_i,
+    output reg                         sel_valid_a_logic,
+    output reg                         sel_valid_b_logic,
+    output reg    [$clog2(NCORES)-1:0] sel_core_a_logic,
+    output reg    [$clog2(NCORES)-1:0] sel_core_b_logic
+);
+    wire [ADDR_WIDTH-1:0] req_addr [0:NCORES-1];
+    genvar i;
+    integer j;
+
+    generate
+        for (i = 0; i < NCORES; i = i + 1) begin : unpack_req_addr
+            assign req_addr[i] = req_addr_packed_i[ADDR_WIDTH*(i+1)-1:ADDR_WIDTH*i];
+        end
+    endgenerate
+
+    wire [2*NCORES-1:0] req_double = {req_valid_i, req_valid_i};
+    wire [2*NCORES-1:0] req_rotated = req_double >> rr_ptr_i;
+
+    // Find Candidate A
+    wire [2*NCORES-1:0] gnt_rotated_a = req_rotated & ~(req_rotated - 1);
+
+    // Find Candidate B
+    wire [2*NCORES-1:0] req_rotated_masked = req_rotated & ~gnt_rotated_a;
+    wire [2*NCORES-1:0] gnt_rotated_b      = req_rotated_masked & ~(req_rotated_masked - 1);
+
+    // De-rotate
+    wire [2*NCORES-1:0] gnt_double_a = gnt_rotated_a << rr_ptr_i;
+    wire [2*NCORES-1:0] gnt_double_b = gnt_rotated_b << rr_ptr_i;
+    wire [NCORES-1:0] gnt_onehot_a = gnt_double_a[NCORES-1:0] | gnt_double_a[2*NCORES-1:NCORES];
+    wire [NCORES-1:0] gnt_onehot_b = gnt_double_b[NCORES-1:0] | gnt_double_b[2*NCORES-1:NCORES];
+
+
+    // Encode (one-hot to binary)
+    always @(*) begin
+        sel_core_a_logic = 0;
+        sel_core_b_logic = 0;
+        for (j = 0; j < NCORES; j = j + 1) begin
+            if (gnt_onehot_a[j]) sel_core_a_logic = j[$clog2(NCORES)-1:0];
+            if (gnt_onehot_b[j]) sel_core_b_logic = j[$clog2(NCORES)-1:0];
+        end
+    end
+
+    // final validation
+    always @(*) begin
+        sel_valid_a_logic = |gnt_onehot_a;
+        if (|gnt_onehot_b &&
+            (req_addr[sel_core_a_logic][ADDR_WIDTH-1:2] != req_addr[sel_core_b_logic][ADDR_WIDTH-1:2])
+        ) begin
+            sel_valid_b_logic = 1'b1;
+        end else begin
+            sel_valid_b_logic = 1'b0;
+        end
+    end
+endmodule
+
 module dbus_dmem #(
     parameter NCORES = `NCORES
 ) (
@@ -314,12 +376,12 @@ module dbus_dmem #(
     // Select up to 2 cores to service this cycle
     reg [$clog2(NCORES)-1:0] sel_core_a; // first selected core index
     reg [$clog2(NCORES)-1:0] sel_core_b; // second selected core index
-    reg [$clog2(NCORES)-1:0] sel_core_a_logic;
-    reg [$clog2(NCORES)-1:0] sel_core_b_logic;
+    wire [$clog2(NCORES)-1:0] sel_core_a_logic;
+    wire [$clog2(NCORES)-1:0] sel_core_b_logic;
     reg sel_valid_a;                     // if a port is selected or not
     reg sel_valid_b;                     // if b port is selected or not
-    reg sel_valid_a_logic;
-    reg sel_valid_b_logic;
+    wire sel_valid_a_logic;
+    wire sel_valid_b_logic;
 
     wire being_served [0:NCORES-1];
 
@@ -400,30 +462,25 @@ module dbus_dmem #(
     end
 
     // Select cores in round-robin fashion
-    always @(*) begin
-        sel_valid_a_logic = 1'b0;
-        sel_valid_b_logic = 1'b0;
-        sel_core_a_logic = 0;
-        sel_core_b_logic = 0;
-
-        // Find first pending request starting from rr_ptr
-        for (k = 0; k < NCORES; k = k + 1) begin
-            if (req_valid[(rr_ptr + k) % NCORES] && !sel_valid_a_logic) begin
-                sel_core_a_logic = (rr_ptr + k) % NCORES;
-                sel_valid_a_logic = 1'b1;
-            end
+    wire [NCORES-1:0] req_valid_packed;
+    wire [NCORES*32-1:0] req_addr_packed;
+    generate
+        for (i = 0; i < NCORES; i = i + 1) begin : pack_req_inputs
+            assign req_valid_packed[i] = req_valid[i];
+            assign req_addr_packed[32*(i+1)-1:32*i] = req_addr[i];
         end
+    endgenerate
 
-        // Find second pending request (different from first)
-        for (m = 0; m < NCORES; m = m + 1) begin
-            if (req_valid[(rr_ptr + m) % NCORES] && !sel_valid_b_logic &&
-                ((rr_ptr + m) % NCORES) != sel_core_a_logic &&
-                (req_addr[sel_core_a_logic][31:2] != req_addr[(rr_ptr + m) % NCORES][31:2])) begin
-                sel_core_b_logic = (rr_ptr + m) % NCORES;
-                sel_valid_b_logic = 1'b1;
-            end
-        end
-    end
+    dual_issue_arbiter arbiter (
+        .rr_ptr_i         (rr_ptr),
+        .req_valid_i      (req_valid_packed),
+        .req_addr_packed_i(req_addr_packed),
+        .sel_valid_a_logic(sel_valid_a_logic),
+        .sel_valid_b_logic(sel_valid_b_logic),
+        .sel_core_a_logic (sel_core_a_logic),
+        .sel_core_b_logic (sel_core_b_logic)
+    );
+
     always @(posedge clk_i) begin
         if (sel_valid_a || rsvcheck_valid_a) begin
             sel_valid_a <= 1'b0;
@@ -747,30 +804,6 @@ module dbus_vmem #(
     );
 endmodule
 
-module perf_cntr (
-    input  wire        clk_i,
-    input  wire  [3:0] addr_i,
-    input  wire  [2:0] wdata_i,
-    input  wire        w_en_i,
-    output wire [31:0] rdata_o
-);
-    reg [63:0] mcycle   = 0;
-    reg  [1:0] cnt_ctrl = 0;
-    reg [31:0] rdata    = 0;
-
-    always @(posedge clk_i) begin
-        rdata <= (addr_i[2]) ? mcycle[31:0] : mcycle[63:32];
-        if (w_en_i && addr_i == 0) cnt_ctrl <= wdata_i[1:0];
-        case (cnt_ctrl)
-            0: mcycle <= 0;
-            1: mcycle <= mcycle + 1;
-            default: ;
-        endcase
-    end
-
-    assign rdata_o = rdata;
-endmodule
-
 module vmem (
     input  wire                   clk_i,
     input  wire                   we_i,
@@ -974,6 +1007,30 @@ module m_spi (
     assign SCL  = r_SCL;
     assign DC   = r_DC;
     assign busy = (r_state != 0 || en);
+endmodule
+
+module perf_cntr (
+    input  wire        clk_i,
+    input  wire  [3:0] addr_i,
+    input  wire  [2:0] wdata_i,
+    input  wire        w_en_i,
+    output wire [31:0] rdata_o
+);
+    reg [63:0] mcycle   = 0;
+    reg  [1:0] cnt_ctrl = 0;
+    reg [31:0] rdata    = 0;
+
+    always @(posedge clk_i) begin
+        rdata <= (addr_i[2]) ? mcycle[31:0] : mcycle[63:32];
+        if (w_en_i && addr_i == 0) cnt_ctrl <= wdata_i[1:0];
+        case (cnt_ctrl)
+            0: mcycle <= 0;
+            1: mcycle <= mcycle + 1;
+            default: ;
+        endcase
+    end
+
+    assign rdata_o = rdata;
 endmodule
 /*********************************************************************************************/
 `resetall

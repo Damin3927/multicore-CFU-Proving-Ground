@@ -74,7 +74,7 @@ bit:
 		echo "Plese run 'make init' first."; \
 		exit 1; \
 	fi
-	$(VIVADO) -mode batch -source build.tcl $(if $(filter 1,$(USE_HLS)),-tclargs --hls)
+	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) $(if $(filter 1,$(USE_HLS)),--hls)
 	cp vivado/main.runs/impl_1/main.bit build/.
 	@if [ -f vivado/main.runs/impl_i/main.ltx ]; then \
 		cp -f vivado/main.runs/impl_i/main.ltx build/.; \
