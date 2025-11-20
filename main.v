@@ -253,6 +253,38 @@ module m_imem (
     assign rdatab_o = rdatab;
 endmodule
 
+module single_issue_arbiter #(
+    parameter NCORES = `NCORES,
+    parameter ADDR_WIDTH = 32
+) (
+    input wire [$clog2(NCORES)-1:0] rr_ptr_i,
+    input wire         [NCORES-1:0] req_valid_i,
+    output reg                      valid_o,
+    output reg [$clog2(NCORES)-1:0] selector_o
+);
+    integer j;
+
+    wire [2*NCORES-1:0] req_double = {req_valid_i, req_valid_i};
+    wire [2*NCORES-1:0] req_rotated = req_double >> rr_ptr_i;
+
+    // Find Candidate
+    wire [2*NCORES-1:0] gnt_rotated = req_rotated & ~(req_rotated - 1);
+
+    // De-rotate
+    wire [2*NCORES-1:0] gnt_double = gnt_rotated << rr_ptr_i;
+    wire [NCORES-1:0] gnt_onehot = gnt_double[NCORES-1:0] | gnt_double[2*NCORES-1:NCORES];
+
+    // Encode (one-hot to binary)
+    always @(*) begin
+        selector_o = 0;
+        for (j = 0; j < NCORES; j = j + 1) begin
+            if (gnt_onehot[j]) selector_o = j[$clog2(NCORES)-1:0];
+        end
+
+        valid_o = |gnt_onehot;
+    end
+endmodule
+
 module dual_issue_arbiter #(
     parameter NCORES = `NCORES,
     parameter ADDR_WIDTH = 32
@@ -698,7 +730,6 @@ module dbus_vmem #(
     input wire [`VMEM_ADDRW-1:0] disp_raddr_i,
     output wire [2:0] disp_rdata_o
 );
-    // Round-robin arbiter for multi-core vmem access
     genvar i;
 
     // Unpack input arrays
@@ -732,9 +763,10 @@ module dbus_vmem #(
 
     // Round-robin state
     reg [$clog2(NCORES)-1:0] rr_ptr = 0;  // points to next core to serve
+    wire [NCORES-1:0] req_valid_packed;
 
-    reg [$clog2(NCORES)-1:0] sel_core;
-    reg sel_valid;
+    wire [$clog2(NCORES)-1:0] sel_core;
+    wire sel_valid;
 
     wire being_served [0:NCORES-1];
 
@@ -767,20 +799,18 @@ module dbus_vmem #(
         end
     endgenerate
 
-    // Combinational logic to select core in round-robin fashion
-    integer k;
-    always @(*) begin : select_core_block
-        sel_valid = 1'b0;
-        sel_core = 0;
-
-        // Find first pending request starting from rr_ptr
-        for (k = 0; k < NCORES; k = k + 1) begin
-            if (req_valid[(rr_ptr + k) % NCORES] && !sel_valid) begin
-                sel_core = (rr_ptr + k) % NCORES;
-                sel_valid = 1'b1;
-            end
+    generate
+        for (i = 0; i < NCORES; i = i + 1) begin : pack_req_inputs
+            assign req_valid_packed[i] = req_valid[i];
         end
-    end
+    endgenerate
+
+    single_issue_arbiter arbiter (
+        .rr_ptr_i    (rr_ptr),
+        .req_valid_i (req_valid_packed),
+        .valid_o     (sel_valid),
+        .selector_o  (sel_core)
+    );
 
     // Track which core is currently being served
     generate
