@@ -19,8 +19,18 @@ NCORES ?= 4
 .PHONY: build prog run clean
 all: prog build
 
+src_dir := src
+cfu_dir := cfu
+srcs += $(wildcard *.v)
+srcs += $(wildcard $(src_dir)/*.v)
+srcs += $(wildcard $(src_dir)/cpu/*.v)
+srcs += $(wildcard $(src_dir)/dmem/*.v)
+srcs += $(wildcard $(src_dir)/imem/*.v)
+srcs += $(wildcard $(src_dir)/vmem/*.v)
+srcs += $(wildcard $(cfu_dir)/*.v)
+
 build:
-	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS -Icfu --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top *.v
+	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(srcs)
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
@@ -89,10 +99,10 @@ conf:
 
 vpp:
 	$(VPP) -c --mode hls --config constr/cfu_hls.cfg --work_dir vitis
-	if [ -d cfu ]; then rm -rf cfu; fi
-	mkdir -p cfu
-	cp vitis/hls/impl/verilog/*.v cfu/.
-	cp vitis/hls/impl/verilog/*.tcl cfu/.
+	if [ -d $(cfu_dir) ]; then rm -rf $(cfu_dir); fi
+	mkdir -p $(cfu_dir)
+	cp vitis/hls/impl/verilog/*.v $(cfu_dir)/.
+	cp vitis/hls/impl/verilog/*.tcl $(cfu_dir)/.
 
 hls-sim:
 	make prog USE_HLS=1
@@ -103,7 +113,7 @@ init:
 	cp constr/build_$(TARGET).tcl build.tcl
 
 clean:
-	rm -rf obj_dir rvcpu-32im* vivado* .Xil cfu
+	rm -rf obj_dir rvcpu-32im* vivado* .Xil $(cfu_dir)
 
 reset-hard:
-	rm -rf obj_dir build rvcpu-32im* sample1.txt vivado* .Xil build.tcl main.xdc cfu
+	rm -rf obj_dir build rvcpu-32im* sample1.txt vivado* .Xil build.tcl main.xdc $(cfu_dir)
