@@ -1,4 +1,25 @@
-void atomic_add(volatile int *ptr, int val) {
+#include "atomic.h"
+#include "util.h"
+
+#ifndef NCORES
+#define NCORES 4
+#endif
+
+static volatile int hart_epochs[NCORES];
+static int expected_stage[NCORES][NCORES];
+
+static volatile int barrier_count[PG_MAX_BARRIERS];
+static volatile int barrier_phase[PG_MAX_BARRIERS];
+
+static inline int valid_hart(int hart_id) {
+    return hart_id >= 0 && hart_id < NCORES;
+}
+
+static inline int valid_barrier(int barrier_id) {
+    return barrier_id >= 0 && barrier_id < PG_MAX_BARRIERS;
+}
+
+int atomic_fetch_add(volatile int *ptr, int val) {
     int old_val, new_val, ret;
     do {
         asm volatile (
@@ -10,4 +31,30 @@ void atomic_add(volatile int *ptr, int val) {
             : "memory"
         );
     } while (ret != 0);
+
+    return old_val;
+}
+
+void atomic_add(volatile int *ptr, int val) {
+    (void)atomic_fetch_add(ptr, val);
+}
+
+void pg_barrier_at(int barrier_id) {
+    if (!valid_barrier(barrier_id)) {
+        return;
+    }
+
+    int phase = barrier_phase[barrier_id];
+    int count = atomic_fetch_add(&barrier_count[barrier_id], 1) + 1;
+
+    if (count == NCORES) { // last core to arrive
+        barrier_count[barrier_id] = 0;
+        atomic_add(&barrier_phase[barrier_id], 1);
+    } else { // wait for phase change
+        while (barrier_phase[barrier_id] == phase) {}
+    }
+}
+
+void pg_barrier(void) {
+    pg_barrier_at(PG_BARRIER_DEFAULT);
 }
