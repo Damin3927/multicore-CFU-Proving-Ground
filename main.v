@@ -118,6 +118,9 @@ module main (
                                    in_vmem_range_reg ? 0 :  // vmem is write-only for CPUs
                                    in_perf_range_reg ? perf_rdata :
                                    in_hart_range_reg ? hart_rdata[i] : dmem_rdata[i];
+
+            wire insnret;
+
             cpu cpu (
                 .clk_i        (clk),            // input  wire
                 .rst_i        (rst),            // input  wire
@@ -131,6 +134,7 @@ module main (
                 .dbus_is_lr_o (dbus_is_lr[i]),  // output wire
                 .dbus_is_sc_o (dbus_is_sc[i]),  // output wire
                 .dbus_rdata_i (dbus_rdata[i]),  // input  wire [`DBUS_DATA_WIDTH-1:0]
+                .insnret      (insnret),        // output wire
                 .hart_index   (i)               // input  wire
             );
 
@@ -146,14 +150,16 @@ module main (
             assign vmem_wdata[i] = in_vmem_range ? dbus_wdata[i] : 0;
 
             wire perf_we          = in_perf_range & dbus_we[i];
-            wire [3:0] perf_addr  = dbus_addr[i][3:0];
+            wire [7:0] perf_addr  = dbus_addr[i][7:0];
             wire [2:0] perf_wdata = dbus_wdata[i][2:0];
             perf_cntr perf (
-                .clk_i  (clk),         // input  wire
-                .addr_i (perf_addr),   // input  wire [3:0]
-                .wdata_i(perf_wdata),  // input  wire [2:0]
-                .w_en_i (perf_we),     // input  wire
-                .rdata_o(perf_rdata)   // output wire [31:0]
+                .clk_i   (clk),         // input  wire
+                .rst_i   (rst),         // input  wire
+                .addr_i  (perf_addr),   // input  wire [7:0]
+                .wdata_i (perf_wdata),  // input  wire [2:0]
+                .w_en_i  (perf_we),     // input  wire
+                .insnret (insnret),     // input  wire
+                .rdata_o (perf_rdata)   // output wire [31:0]
             );
         end
     endgenerate
@@ -1011,17 +1017,26 @@ endmodule
 
 module perf_cntr (
     input  wire        clk_i,
-    input  wire  [3:0] addr_i,
+    input  wire        rst_i,
+    input  wire  [7:0] addr_i,
     input  wire  [2:0] wdata_i,
     input  wire        w_en_i,
+    input  wire        insnret,
     output wire [31:0] rdata_o
 );
     reg [63:0] mcycle   = 0;
     reg  [1:0] cnt_ctrl = 0;
     reg [31:0] rdata    = 0;
 
+    reg [63:0] r_insnret = 0;
     always @(posedge clk_i) begin
-        rdata <= (addr_i[2]) ? mcycle[31:0] : mcycle[63:32];
+        r_insnret <= (rst_i) ? 0 : (insnret) ? r_insnret + 1 : r_insnret;
+    end
+
+    always @(posedge clk_i) begin
+        rdata <= (addr_i == 8'h04) ? mcycle[31:0]  :
+                 (addr_i == 8'h08) ? mcycle[63:32] :
+                 (addr_i == 8'h10) ? r_insnret[31:0] : r_insnret[63:32];
         if (w_en_i && addr_i == 0) cnt_ctrl <= wdata_i[1:0];
         case (cnt_ctrl)
             0: mcycle <= 0;
