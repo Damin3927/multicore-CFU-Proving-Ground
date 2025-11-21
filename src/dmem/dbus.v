@@ -15,9 +15,22 @@ module dbus_dmem #(
     output wire [32*NCORES-1:0] rdata_packed_o,
     output wire [NCORES-1:0] stall_packed_o
 );
-    // Round-robin arbiter for multi-core dmem access
     genvar i;
-    integer j, k, m;
+    integer j;
+    integer k;
+    integer m;
+
+    // Statemachine
+    localparam IDLE = 'd0;
+    localparam RSVCHECK = 'd1;
+    localparam ACCESS = 'd2;
+    localparam RESP = 'd3;
+    localparam STATE_WIDTH = 'd4;
+
+    reg [$clog2(STATE_WIDTH)-1:0] state_a_q = IDLE;
+    reg [$clog2(STATE_WIDTH)-1:0] state_a_d;
+    reg [$clog2(STATE_WIDTH)-1:0] state_b_q = IDLE;
+    reg [$clog2(STATE_WIDTH)-1:0] state_b_d;
 
     // Unpack input arrays
     wire        re   [0:NCORES-1];
@@ -27,10 +40,11 @@ module dbus_dmem #(
     wire [3:0]  wstrb[0:NCORES-1];
     wire        is_lr[0:NCORES-1];
     wire        is_sc[0:NCORES-1];
-    wire [31:0] rdata[0:NCORES-1];
-    wire        stall[0:NCORES-1];
-    reg  [31:0] rdata_reg [0:NCORES-1];
-    reg         stall_o   [0:NCORES-1];
+    reg  [31:0] rdata_q [0:NCORES-1];
+    reg         stall_q [0:NCORES-1];
+
+    reg  [31:0] rdata_d [0:NCORES-1];
+    reg         stall_d [0:NCORES-1];
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
@@ -41,130 +55,92 @@ module dbus_dmem #(
             assign wstrb[i] = wstrb_packed_i[4*(i+1)-1:4*i];
             assign is_lr[i] = is_lr_packed_i[i];
             assign is_sc[i] = is_sc_packed_i[i];
-            assign rdata_packed_o[32*(i+1)-1:32*i] = rdata_reg[i];
-            assign stall_packed_o[i] = stall_o[i];
+            assign rdata_packed_o[32*(i+1)-1:32*i] = rdata_q[i];
+            assign stall_packed_o[i] = stall_q[i];
         end
     endgenerate
 
-    always @(posedge clk_i) begin
-        for (j = 0; j < NCORES; j = j + 1) begin
-            stall_o[j] <= stall[j];
-        end
-    end
-
     // Reserved request registers for each core
-    reg        req_valid [0:NCORES-1];  // request is pending
-    reg        req_re [0:NCORES-1];
-    reg        req_we [0:NCORES-1];
-    reg [31:0] req_addr [0:NCORES-1];
-    reg [31:0] req_wdata [0:NCORES-1];
-    reg [3:0]  req_wstrb [0:NCORES-1];
-    reg        req_is_lr [0:NCORES-1];
-    reg        req_is_sc [0:NCORES-1];
+    reg        req_valid_q [0:NCORES-1];  // request is pending
+    reg        req_re_q    [0:NCORES-1];
+    reg        req_we_q    [0:NCORES-1];
+    reg [31:0] req_addr_q  [0:NCORES-1];
+    reg [31:0] req_wdata_q [0:NCORES-1];
+    reg [3:0]  req_wstrb_q [0:NCORES-1];
+    reg        req_is_lr_q [0:NCORES-1];
+    reg        req_is_sc_q [0:NCORES-1];
+
+    reg        req_valid_d [0:NCORES-1];
+    reg        req_re_d    [0:NCORES-1];
+    reg        req_we_d    [0:NCORES-1];
+    reg [31:0] req_addr_d  [0:NCORES-1];
+    reg [31:0] req_wdata_d [0:NCORES-1];
+    reg [3:0]  req_wstrb_d [0:NCORES-1];
+    reg        req_is_lr_d [0:NCORES-1];
+    reg        req_is_sc_d [0:NCORES-1];
 
     // Round-robin state
-    reg [$clog2(NCORES)-1:0] rr_ptr = 0;  // points to next core to serve
+    reg [$clog2(NCORES)-1:0] rr_ptr_q = 0;  // points to next core to serve
 
     // Select up to 2 cores to service this cycle
-    reg [$clog2(NCORES)-1:0] sel_core_a; // first selected core index
-    reg [$clog2(NCORES)-1:0] sel_core_b; // second selected core index
+    reg [$clog2(NCORES)-1:0] sel_core_a_q = 'd0; // first selected core index
+    reg [$clog2(NCORES)-1:0] sel_core_a_d;
+    reg [$clog2(NCORES)-1:0] sel_core_b_q = 'd0; // second selected core index
+    reg [$clog2(NCORES)-1:0] sel_core_b_d;
     wire [$clog2(NCORES)-1:0] sel_core_a_logic;
     wire [$clog2(NCORES)-1:0] sel_core_b_logic;
-    reg sel_valid_a;                     // if a port is selected or not
-    reg sel_valid_b;                     // if b port is selected or not
     wire sel_valid_a_logic;
     wire sel_valid_b_logic;
 
-    wire being_served [0:NCORES-1];
-
-    reg rsvcheck_valid_a;
-    reg rsvcheck_valid_b;
+    reg being_served [0:NCORES-1];
 
     // LR/SC reservation
-    reg        reservation_valid   [0:NCORES-1];
-    reg [31:0] reservation_addr    [0:NCORES-1];
-    reg        rsvcheck_sc_success [0:NCORES-1];
+    reg        reservation_valid_q   [0:NCORES-1];
+    reg [31:0] reservation_addr_q    [0:NCORES-1];
+    reg        rsvcheck_sc_success_q [0:NCORES-1];
 
-    wire sc_success_a;
-    wire sc_success_b;
+    reg        reservation_valid_d   [0:NCORES-1];
+    reg [31:0] reservation_addr_d    [0:NCORES-1];
+    reg        rsvcheck_sc_success_d [0:NCORES-1];
 
-    wire rea_int;
-    wire reb_int;
-    wire wea_int;
-    wire web_int;
-    wire [31:0] addra_int;
-    wire [31:0] addrb_int;
-    wire [31:0] wdataa_int;
-    wire [31:0] wdatab_int;
-    wire [3:0]  wstrba_int;
-    wire [3:0]  wstrbb_int;
-    wire is_sc_a;
-    wire is_sc_b;
+    reg rea_int;
+    reg reb_int;
+    reg wea_int;
+    reg web_int;
+    reg [31:0] addra_int;
+    reg [31:0] addrb_int;
+    reg [31:0] wdataa_int;
+    reg [31:0] wdatab_int;
+    reg [3:0]  wstrba_int;
+    reg [3:0]  wstrbb_int;
 
     wire [31:0] rdataa_dmem;
     wire [31:0] rdatab_dmem;
 
-    reg [$clog2(NCORES)-1:0] resp_core_a;
-    reg [$clog2(NCORES)-1:0] resp_core_b;
-    reg resp_valid_a;
-    reg resp_valid_b;
-    reg resp_is_sc_a;
-    reg resp_is_sc_b;
+    reg [$clog2(NCORES)-1:0] resp_core_a_q;
+    reg [$clog2(NCORES)-1:0] resp_core_b_q;
+    reg resp_is_sc_a_q;
+    reg resp_is_sc_b_q;
 
-    // Reserve incoming requests
-    always @(posedge clk_i) begin : reserve_requests_block
-        for (j = 0; j < NCORES; j = j + 1) begin
-            // Set valid if new request arrives
-            if (!req_valid[j]) begin
-                req_valid[j] <= addr[j] != 32'h0;  // new request
-                req_re[j]    <= re[j];
-                req_we[j]    <= we[j];
-                req_addr[j]  <= addr[j];
-                req_wdata[j] <= wdata[j];
-                req_wstrb[j] <= wstrb[j];
-                req_is_lr[j] <= is_lr[j];
-                req_is_sc[j] <= is_sc[j];
-            end else if (being_served[j]) begin
-                // Clear valid when being served
-                req_valid[j] <= 1'b0;
-                req_re[j]    <= 1'b0;
-                req_we[j]    <= 1'b0;
-                req_addr[j]  <= 32'h0;
-                req_wdata[j] <= 32'h0;
-                req_wstrb[j] <= 4'h0;
-                req_is_lr[j] <= 1'b0;
-                req_is_sc[j] <= 1'b0;
-            end
-        end
-    end
+    reg [$clog2(NCORES)-1:0] resp_core_a_d;
+    reg [$clog2(NCORES)-1:0] resp_core_b_d;
+    reg resp_is_sc_a_d;
+    reg resp_is_sc_b_d;
 
-    generate
-        for (i = 0; i < NCORES; i = i + 1) begin : gen_output
-            assign stall[i] = (addr[i] != 0) // new request arrives
-                            || (req_valid[i]); // pending request
-            assign rdata[i] = (resp_valid_a && resp_core_a == i) ? (resp_is_sc_a ? {31'b0, !rsvcheck_sc_success[i]} : rdataa_dmem) :
-                              (resp_valid_b && resp_core_b == i) ? (resp_is_sc_b ? {31'b0, !rsvcheck_sc_success[i]} : rdatab_dmem) : 32'h0;
-        end
-    endgenerate
-
-    always @(posedge clk_i) begin
-        for (j = 0; j < NCORES; j = j + 1) begin
-            rdata_reg[j] <= rdata[j];
-        end
-    end
+    reg [$clog2(NCORES)-1:0] rr_ptr_d;
 
     // Select cores in round-robin fashion
     wire [NCORES-1:0] req_valid_packed;
     wire [NCORES*32-1:0] req_addr_packed;
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : pack_req_inputs
-            assign req_valid_packed[i] = req_valid[i];
-            assign req_addr_packed[32*(i+1)-1:32*i] = req_addr[i];
+            assign req_valid_packed[i] = req_valid_q[i];
+            assign req_addr_packed[32*(i+1)-1:32*i] = req_addr_q[i];
         end
     endgenerate
 
     dual_issue_arbiter arbiter (
-        .rr_ptr_i         (rr_ptr),
+        .rr_ptr_i         (rr_ptr_q),
         .req_valid_i      (req_valid_packed),
         .req_addr_packed_i(req_addr_packed),
         .valid_a_o        (sel_valid_a_logic),
@@ -173,139 +149,217 @@ module dbus_dmem #(
         .selector_b_o     (sel_core_b_logic)
     );
 
-    always @(posedge clk_i) begin
-        if (sel_valid_a || rsvcheck_valid_a) begin
-            sel_valid_a <= 1'b0;
-        end else begin
-            sel_valid_a <= sel_valid_a_logic;
-            sel_core_a <= sel_core_a_logic;
-        end
+    // FSM handshake per port: IDLE -> RSVCHECK -> ACCESS -> RESP
+    wire select_a_fire;
+    wire select_b_fire;
+    wire access_valid_a;
+    wire access_valid_b;
+    wire resp_valid_a;
+    wire resp_valid_b;
 
-        if (sel_valid_b || rsvcheck_valid_b) begin
-            sel_valid_b <= 1'b0;
-        end else if (sel_core_b_logic != sel_core_a) begin
-            sel_valid_b <= sel_valid_b_logic;
-            sel_core_b <= sel_core_b_logic;
-        end
-    end
+    assign select_a_fire = (state_a_q == IDLE) && sel_valid_a_logic;
+    assign select_b_fire = (state_b_q == IDLE) && sel_valid_b_logic
+                        && ((state_a_q == IDLE) || (sel_core_b_logic != sel_core_a_q))
+                        && (!select_a_fire || (sel_core_b_logic != sel_core_a_logic));
+    assign access_valid_a = (state_a_q == ACCESS);
+    assign access_valid_b = (state_b_q == ACCESS);
+    assign resp_valid_a     = (state_a_q == RESP);
+    assign resp_valid_b     = (state_b_q == RESP);
 
-    generate
-        for (i = 0; i < NCORES; i = i + 1) begin : gen_being_served
-            assign being_served[i] = (rsvcheck_valid_a && sel_core_a == i)
-                                  || (rsvcheck_valid_b && sel_core_b == i);
-        end
-    endgenerate
+    always @(*) begin
+        state_a_d    = state_a_q;
+        sel_core_a_d = sel_core_a_q;
+        state_b_d    = state_b_q;
+        sel_core_b_d = sel_core_b_q;
+        rr_ptr_d        = rr_ptr_q;
+        resp_core_a_d   = resp_core_a_q;
+        resp_core_b_d   = resp_core_b_q;
+        resp_is_sc_a_d  = resp_is_sc_a_q;
+        resp_is_sc_b_d  = resp_is_sc_b_q;
+        rea_int         = 1'b0;
+        reb_int         = 1'b0;
+        wea_int         = 1'b0;
+        web_int         = 1'b0;
+        addra_int       = 32'h0;
+        addrb_int       = 32'h0;
+        wdataa_int      = 32'h0;
+        wdatab_int      = 32'h0;
+        wstrba_int      = 4'h0;
+        wstrbb_int      = 4'h0;
 
-    always @(posedge clk_i) begin
-        if (rsvcheck_valid_a) begin
-            rsvcheck_valid_a <= 1'b0;
-        end else begin
-            rsvcheck_valid_a <= sel_valid_a;
-        end
+        for (k = 0; k < NCORES; k = k + 1) begin
+            stall_d[k]               = (addr[k] != 32'h0) // new request arrives
+                                       || (req_valid_q[k]); // pending request
+            rdata_d[k]               = (resp_valid_a && resp_core_a_q == k) ? (resp_is_sc_a_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdataa_dmem) :
+                                       (resp_valid_b && resp_core_b_q == k) ? (resp_is_sc_b_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdatab_dmem) : 32'h0;
+            req_valid_d[k]           = req_valid_q[k];
+            req_re_d[k]              = req_re_q[k];
+            req_we_d[k]              = req_we_q[k];
+            req_addr_d[k]            = req_addr_q[k];
+            req_wdata_d[k]           = req_wdata_q[k];
+            req_wstrb_d[k]           = req_wstrb_q[k];
+            req_is_lr_d[k]           = req_is_lr_q[k];
+            req_is_sc_d[k]           = req_is_sc_q[k];
+            reservation_valid_d[k]   = reservation_valid_q[k];
+            reservation_addr_d[k]    = reservation_addr_q[k];
+            rsvcheck_sc_success_d[k] = rsvcheck_sc_success_q[k];
 
-        if (rsvcheck_valid_b) begin
-            rsvcheck_valid_b <= 1'b0;
-        end else begin
-            rsvcheck_valid_b <= sel_valid_b;
-        end
-    end
+            being_served[k]          = (access_valid_a && sel_core_a_q == k)
+                                    || (access_valid_b && sel_core_b_q == k);
 
-    assign sc_success_a = reservation_valid[sel_core_a] && (reservation_addr[sel_core_a] == req_addr[sel_core_a]);
-    assign sc_success_b = reservation_valid[sel_core_b] && (reservation_addr[sel_core_b] == req_addr[sel_core_b]);
-
-    always @(posedge clk_i) begin
-        // sel_core_a request handling
-        if (sel_valid_a) begin
-            if (req_re[sel_core_a] && req_is_lr[sel_core_a]) begin
-                // set addr to the reservation set
-                reservation_valid[sel_core_a] <= 1'b1;
-                reservation_addr[sel_core_a]  <= req_addr[sel_core_a];
-            end else if (req_we[sel_core_a] && req_is_sc[sel_core_a]) begin
-                rsvcheck_sc_success[sel_core_a] <= sc_success_a;
-                if (sc_success_a) begin
-                    // clear reservation on successful SC
-                    for (j = 0; j < NCORES; j = j + 1) begin
-                        if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_a]) begin
-                            reservation_valid[j] <= 1'b0;
-                            reservation_addr[j]  <= 32'h0;
-                        end
-                    end
-                end
-            end else if (req_we[sel_core_a] && !req_is_sc[sel_core_a]) begin
-                // clear reservation if store to the same addr in one of the reservation set
-                for (j = 0; j < NCORES; j = j + 1) begin
-                    if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_a]) begin
-                        reservation_valid[j] <= 1'b0;
-                        reservation_addr[j]  <= 32'h0;
-                    end
-                end
+            if (!req_valid_q[k]) begin
+                req_valid_d[k] = (addr[k] != 32'h0);
+                req_re_d[k]    = re[k];
+                req_we_d[k]    = we[k];
+                req_addr_d[k]  = addr[k];
+                req_wdata_d[k] = wdata[k];
+                req_wstrb_d[k] = wstrb[k];
+                req_is_lr_d[k] = is_lr[k];
+                req_is_sc_d[k] = is_sc[k];
+            end else if (being_served[k]) begin
+                req_valid_d[k] = 1'b0;
+                req_re_d[k]    = 1'b0;
+                req_we_d[k]    = 1'b0;
+                req_addr_d[k]  = 32'h0;
+                req_wdata_d[k] = 32'h0;
+                req_wstrb_d[k] = 4'h0;
+                req_is_lr_d[k] = 1'b0;
+                req_is_sc_d[k] = 1'b0;
             end
         end
 
-        // sel_core_b request handling
-        if (sel_valid_b) begin
-            if (req_re[sel_core_b] && req_is_lr[sel_core_b]) begin
-                // set addr to the reservation set
-                reservation_valid[sel_core_b] <= 1'b1;
-                reservation_addr[sel_core_b]  <= req_addr[sel_core_b];
-            end else if (req_we[sel_core_b] && req_is_sc[sel_core_b]) begin
-                rsvcheck_sc_success[sel_core_b] <= sc_success_b;
-                if (sc_success_b) begin
-                    // clear reservation on successful SC
-                    for (j = 0; j < NCORES; j = j + 1) begin
-                        if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_b]) begin
-                            reservation_valid[j] <= 1'b0;
-                            reservation_addr[j]  <= 32'h0;
+        case (state_a_q)
+            IDLE: begin
+                if (select_a_fire) begin
+                    sel_core_a_d = sel_core_a_logic;
+                    state_a_d    = RSVCHECK;
+                end
+            end
+            RSVCHECK: begin
+                state_a_d = ACCESS;
+                if (req_re_q[sel_core_a_q] && req_is_lr_q[sel_core_a_q]) begin
+                    reservation_valid_d[sel_core_a_q] = 1'b1;
+                    reservation_addr_d[sel_core_a_q]  = req_addr_q[sel_core_a_q];
+                end else if (req_we_q[sel_core_a_q] && req_is_sc_q[sel_core_a_q]) begin
+                    rsvcheck_sc_success_d[sel_core_a_q] = reservation_valid_q[sel_core_a_q] && (reservation_addr_q[sel_core_a_q] == req_addr_q[sel_core_a_q]);
+                    if (rsvcheck_sc_success_d[sel_core_a_q]) begin
+                        for (m = 0; m < NCORES; m = m + 1) begin
+                            if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_a_q]) begin
+                                reservation_valid_d[m] = 1'b0;
+                            end
+                        end
+                    end
+                end else if (req_we_q[sel_core_a_q] && !req_is_sc_q[sel_core_a_q]) begin
+                    for (m = 0; m < NCORES; m = m + 1) begin
+                        if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_a_q]) begin
+                            reservation_valid_d[m] = 1'b0;
                         end
                     end
                 end
-            end else if (req_we[sel_core_b] && !req_is_sc[sel_core_b]) begin
-                // clear reservation if store to the same addr in one of the reservation set
-                for (j = 0; j < NCORES; j = j + 1) begin
-                    if (reservation_valid[j] && reservation_addr[j] == req_addr[sel_core_b]) begin
-                        reservation_valid[j] <= 1'b0;
-                        reservation_addr[j]  <= 32'h0;
+            end
+            ACCESS: begin
+                state_a_d      = RESP;
+                resp_core_a_d  = sel_core_a_q;
+                resp_is_sc_a_d = req_is_sc_q[sel_core_a_q];
+                rea_int        = req_re_q[sel_core_a_q];
+                wea_int        = req_we_q[sel_core_a_q] && (req_is_sc_q[sel_core_a_q] ? rsvcheck_sc_success_q[sel_core_a_q] : 1'b1);
+                addra_int      = req_addr_q[sel_core_a_q];
+                wdataa_int     = req_wdata_q[sel_core_a_q];
+                wstrba_int     = req_wstrb_q[sel_core_a_q];
+            end
+            RESP: begin
+                state_a_d = IDLE;
+                if (rsvcheck_sc_success_q[resp_core_a_q]) begin
+                    rsvcheck_sc_success_d[resp_core_a_q] = 1'b0;
+                end
+            end
+            default: begin
+                state_a_d = IDLE;
+            end
+        endcase
+
+        case (state_b_q)
+            IDLE: begin
+                if (select_b_fire) begin
+                    sel_core_b_d = sel_core_b_logic;
+                    state_b_d    = RSVCHECK;
+                end
+            end
+            RSVCHECK: begin
+                state_b_d = ACCESS;
+                if (req_re_q[sel_core_b_q] && req_is_lr_q[sel_core_b_q]) begin
+                    reservation_valid_d[sel_core_b_q] = 1'b1;
+                    reservation_addr_d[sel_core_b_q]  = req_addr_q[sel_core_b_q];
+                end else if (req_we_q[sel_core_b_q] && req_is_sc_q[sel_core_b_q]) begin
+                    rsvcheck_sc_success_d[sel_core_b_q] = reservation_valid_q[sel_core_b_q] && (reservation_addr_q[sel_core_b_q] == req_addr_q[sel_core_b_q]);
+                    if (rsvcheck_sc_success_d[sel_core_b_q]) begin
+                        for (m = 0; m < NCORES; m = m + 1) begin
+                            if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_b_q]) begin
+                                reservation_valid_d[m] = 1'b0;
+                            end
+                        end
+                    end
+                end else if (req_we_q[sel_core_b_q] && !req_is_sc_q[sel_core_b_q]) begin
+                    for (m = 0; m < NCORES; m = m + 1) begin
+                        if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_b_q]) begin
+                            reservation_valid_d[m] = 1'b0;
+                        end
                     end
                 end
             end
+            ACCESS: begin
+                state_b_d      = RESP;
+                resp_core_b_d  = sel_core_b_q;
+                resp_is_sc_b_d = req_is_sc_q[sel_core_b_q];
+                reb_int        = req_re_q[sel_core_b_q];
+                web_int        = req_we_q[sel_core_b_q] && (req_is_sc_q[sel_core_b_q] ? rsvcheck_sc_success_q[sel_core_b_q] : 1'b1);
+                addrb_int      = req_addr_q[sel_core_b_q];
+                wdatab_int     = req_wdata_q[sel_core_b_q];
+                wstrbb_int     = req_wstrb_q[sel_core_b_q];
+            end
+            RESP: begin
+                state_b_d = IDLE;
+                if (rsvcheck_sc_success_q[resp_core_b_q]) begin
+                    rsvcheck_sc_success_d[resp_core_b_q] = 1'b0;
+                end
+            end
+            default: begin
+                state_b_d = IDLE;
+            end
+        endcase
+
+        if ((state_a_q == RSVCHECK) && (state_b_q == RSVCHECK)) begin
+            rr_ptr_d = (sel_core_b_q + 1) % NCORES;
+        end else if (state_a_q == RSVCHECK) begin
+            rr_ptr_d = (sel_core_a_q + 1) % NCORES;
         end
     end
 
-    assign rea_int    = rsvcheck_valid_a && req_re[sel_core_a];
-    assign reb_int    = rsvcheck_valid_b && req_re[sel_core_b];
-    assign wea_int    = rsvcheck_valid_a && req_we[sel_core_a] && (req_is_sc[sel_core_a] ? rsvcheck_sc_success[sel_core_a] : 1'b1);
-    assign web_int    = rsvcheck_valid_b && req_we[sel_core_b] && (req_is_sc[sel_core_b] ? rsvcheck_sc_success[sel_core_b] : 1'b1);
-    assign addra_int  = rsvcheck_valid_a ? req_addr[sel_core_a]  : 0;
-    assign addrb_int  = rsvcheck_valid_b ? req_addr[sel_core_b]  : 0;
-    assign wdataa_int = rsvcheck_valid_a ? req_wdata[sel_core_a] : 0;
-    assign wdatab_int = rsvcheck_valid_b ? req_wdata[sel_core_b] : 0;
-    assign wstrba_int = rsvcheck_valid_a ? req_wstrb[sel_core_a] : 0;
-    assign wstrbb_int = rsvcheck_valid_b ? req_wstrb[sel_core_b] : 0;
-    assign is_sc_a    = rsvcheck_valid_a && req_is_sc[sel_core_a];
-    assign is_sc_b    = rsvcheck_valid_b && req_is_sc[sel_core_b];
-
     always @(posedge clk_i) begin
-        resp_core_a  <= sel_core_a;
-        resp_core_b  <= sel_core_b;
-        resp_valid_a <= rsvcheck_valid_a;
-        resp_valid_b <= rsvcheck_valid_b;
-        resp_is_sc_a <= is_sc_a;
-        resp_is_sc_b <= is_sc_b;
+        state_a_q    <= state_a_d;
+        state_b_q    <= state_b_d;
+        sel_core_a_q <= sel_core_a_d;
+        sel_core_b_q <= sel_core_b_d;
+        rr_ptr_q       <= rr_ptr_d;
+        resp_core_a_q  <= resp_core_a_d;
+        resp_core_b_q  <= resp_core_b_d;
+        resp_is_sc_a_q <= resp_is_sc_a_d;
+        resp_is_sc_b_q <= resp_is_sc_b_d;
 
-        if (resp_valid_a && rsvcheck_sc_success[resp_core_a]) begin
-            rsvcheck_sc_success[resp_core_a] <= 1'b0;
-        end
-        if (resp_valid_b && rsvcheck_sc_success[resp_core_b]) begin
-            rsvcheck_sc_success[resp_core_b] <= 1'b0;
-        end
-    end
-
-    // Update round-robin pointer
-    always @(posedge clk_i) begin
-        if (sel_valid_a && sel_valid_b) begin
-            rr_ptr <= (sel_core_b + 1) % NCORES;
-        end else if (sel_valid_a) begin
-            rr_ptr <= (sel_core_a + 1) % NCORES;
+        for (j = 0; j < NCORES; j = j + 1) begin
+            stall_q[j]             <= stall_d[j];
+            rdata_q[j]             <= rdata_d[j];
+            req_valid_q[j]         <= req_valid_d[j];
+            req_re_q[j]            <= req_re_d[j];
+            req_we_q[j]            <= req_we_d[j];
+            req_addr_q[j]          <= req_addr_d[j];
+            req_wdata_q[j]         <= req_wdata_d[j];
+            req_wstrb_q[j]         <= req_wstrb_d[j];
+            req_is_lr_q[j]         <= req_is_lr_d[j];
+            req_is_sc_q[j]         <= req_is_sc_d[j];
+            reservation_valid_q[j] <= reservation_valid_d[j];
+            reservation_addr_q[j]  <= reservation_addr_d[j];
+            rsvcheck_sc_success_q[j] <= rsvcheck_sc_success_d[j];
         end
     end
 

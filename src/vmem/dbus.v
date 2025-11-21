@@ -1,6 +1,8 @@
 `resetall
 `default_nettype none
 
+`include "config.vh"
+
 module dbus_vmem #(
     parameter NCORES = `NCORES
 ) (
