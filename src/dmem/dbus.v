@@ -267,9 +267,9 @@ module dbus_dmem #(
             end
             ACCESS: begin
                 state_a_d      = IDLE;
-                ret_valid_a_d = 1'b1;
-                ret_core_a_d  = sel_core_a_q;
-                ret_is_sc_a_d = req_is_sc_q[sel_core_a_q];
+                ret_valid_a_d  = 1'b1;
+                ret_core_a_d   = sel_core_a_q;
+                ret_is_sc_a_d  = req_is_sc_q[sel_core_a_q];
                 rea_int        = req_re_q[sel_core_a_q];
                 wea_int        = req_we_q[sel_core_a_q] && (req_is_sc_q[sel_core_a_q] ? rsvcheck_sc_success_q[sel_core_a_q] : 1'b1);
                 addra_int      = req_addr_q[sel_core_a_q];
@@ -321,9 +321,9 @@ module dbus_dmem #(
             end
             ACCESS: begin
                 state_b_d      = IDLE;
-                ret_valid_b_d = 1'b1;
-                ret_core_b_d  = sel_core_b_q;
-                ret_is_sc_b_d = req_is_sc_q[sel_core_b_q];
+                ret_valid_b_d  = 1'b1;
+                ret_core_b_d   = sel_core_b_q;
+                ret_is_sc_b_d  = req_is_sc_q[sel_core_b_q];
                 reb_int        = req_re_q[sel_core_b_q];
                 web_int        = req_we_q[sel_core_b_q] && (req_is_sc_q[sel_core_b_q] ? rsvcheck_sc_success_q[sel_core_b_q] : 1'b1);
                 addrb_int      = req_addr_q[sel_core_b_q];
