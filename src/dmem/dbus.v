@@ -116,19 +116,19 @@ module dbus_dmem #(
     wire [31:0] rdataa_dmem;
     wire [31:0] rdatab_dmem;
 
-    reg [$clog2(NCORES)-1:0] resp_core_a_q;
-    reg [$clog2(NCORES)-1:0] resp_core_b_q;
-    reg resp_valid_a_q;
-    reg resp_valid_b_q;
-    reg resp_is_sc_a_q;
-    reg resp_is_sc_b_q;
+    reg [$clog2(NCORES)-1:0] ret_core_a_q;
+    reg [$clog2(NCORES)-1:0] ret_core_b_q;
+    reg ret_valid_a_q;
+    reg ret_valid_b_q;
+    reg ret_is_sc_a_q;
+    reg ret_is_sc_b_q;
 
-    reg [$clog2(NCORES)-1:0] resp_core_a_d;
-    reg [$clog2(NCORES)-1:0] resp_core_b_d;
-    reg resp_valid_a_d;
-    reg resp_valid_b_d;
-    reg resp_is_sc_a_d;
-    reg resp_is_sc_b_d;
+    reg [$clog2(NCORES)-1:0] ret_core_a_d;
+    reg [$clog2(NCORES)-1:0] ret_core_b_d;
+    reg ret_valid_a_d;
+    reg ret_valid_b_d;
+    reg ret_is_sc_a_d;
+    reg ret_is_sc_b_d;
 
     reg [$clog2(NCORES)-1:0] rr_ptr_d;
 
@@ -152,7 +152,6 @@ module dbus_dmem #(
         .selector_b_o     (sel_core_b_arb)
     );
 
-    // FSM handshake per port: IDLE -> RSVCHECK -> ACCESS -> RESP
     wire select_a_fire;
     wire select_b_fire;
     wire is_access_a;
@@ -171,12 +170,12 @@ module dbus_dmem #(
         state_b_d       = state_b_q;
         sel_core_b_d    = sel_core_b_q;
         rr_ptr_d        = rr_ptr_q;
-        resp_valid_a_d  = resp_valid_a_q;
-        resp_valid_b_d  = resp_valid_b_q;
-        resp_core_a_d   = resp_core_a_q;
-        resp_core_b_d   = resp_core_b_q;
-        resp_is_sc_a_d  = resp_is_sc_a_q;
-        resp_is_sc_b_d  = resp_is_sc_b_q;
+        ret_valid_a_d  = ret_valid_a_q;
+        ret_valid_b_d  = ret_valid_b_q;
+        ret_core_a_d   = ret_core_a_q;
+        ret_core_b_d   = ret_core_b_q;
+        ret_is_sc_a_d  = ret_is_sc_a_q;
+        ret_is_sc_b_d  = ret_is_sc_b_q;
         rea_int         = 1'b0;
         reb_int         = 1'b0;
         wea_int         = 1'b0;
@@ -191,8 +190,8 @@ module dbus_dmem #(
         for (k = 0; k < NCORES; k = k + 1) begin
             stall_d[k]               = (addr[k] != 32'h0) // new request arrives
                                        || (req_valid_q[k]); // pending request
-            rdata_d[k]               = (resp_valid_a_q && resp_core_a_q == k) ? (resp_is_sc_a_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdataa_dmem) :
-                                       (resp_valid_b_q && resp_core_b_q == k) ? (resp_is_sc_b_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdatab_dmem) : 32'h0;
+            rdata_d[k]               = (ret_valid_a_q && ret_core_a_q == k) ? (ret_is_sc_a_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdataa_dmem) :
+                                       (ret_valid_b_q && ret_core_b_q == k) ? (ret_is_sc_b_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdatab_dmem) : 32'h0;
             req_valid_d[k]           = req_valid_q[k];
             req_re_d[k]              = req_re_q[k];
             req_we_d[k]              = req_we_q[k];
@@ -239,9 +238,9 @@ module dbus_dmem #(
                     sel_core_a_d = sel_core_a_arb;
                 end
 
-                if (resp_valid_a_q) begin
-                    rsvcheck_sc_success_d[resp_core_a_q] = 1'b0;
-                    resp_valid_a_d = 1'b0;
+                if (ret_valid_a_q) begin
+                    rsvcheck_sc_success_d[ret_core_a_q] = 1'b0;
+                    ret_valid_a_d = 1'b0;
                 end
             end
             RSVCHECK: begin
@@ -268,9 +267,9 @@ module dbus_dmem #(
             end
             ACCESS: begin
                 state_a_d      = IDLE;
-                resp_valid_a_d = 1'b1;
-                resp_core_a_d  = sel_core_a_q;
-                resp_is_sc_a_d = req_is_sc_q[sel_core_a_q];
+                ret_valid_a_d = 1'b1;
+                ret_core_a_d  = sel_core_a_q;
+                ret_is_sc_a_d = req_is_sc_q[sel_core_a_q];
                 rea_int        = req_re_q[sel_core_a_q];
                 wea_int        = req_we_q[sel_core_a_q] && (req_is_sc_q[sel_core_a_q] ? rsvcheck_sc_success_q[sel_core_a_q] : 1'b1);
                 addra_int      = req_addr_q[sel_core_a_q];
@@ -293,9 +292,9 @@ module dbus_dmem #(
                     sel_core_b_d = sel_core_b_arb;
                 end
 
-                if (resp_valid_b_q) begin
-                    rsvcheck_sc_success_d[resp_core_b_q] = 1'b0;
-                    resp_valid_b_d = 1'b0;
+                if (ret_valid_b_q) begin
+                    rsvcheck_sc_success_d[ret_core_b_q] = 1'b0;
+                    ret_valid_b_d = 1'b0;
                 end
             end
             RSVCHECK: begin
@@ -322,9 +321,9 @@ module dbus_dmem #(
             end
             ACCESS: begin
                 state_b_d      = IDLE;
-                resp_valid_b_d = 1'b1;
-                resp_core_b_d  = sel_core_b_q;
-                resp_is_sc_b_d = req_is_sc_q[sel_core_b_q];
+                ret_valid_b_d = 1'b1;
+                ret_core_b_d  = sel_core_b_q;
+                ret_is_sc_b_d = req_is_sc_q[sel_core_b_q];
                 reb_int        = req_re_q[sel_core_b_q];
                 web_int        = req_we_q[sel_core_b_q] && (req_is_sc_q[sel_core_b_q] ? rsvcheck_sc_success_q[sel_core_b_q] : 1'b1);
                 addrb_int      = req_addr_q[sel_core_b_q];
@@ -349,12 +348,12 @@ module dbus_dmem #(
         sel_core_a_q <= sel_core_a_d;
         sel_core_b_q <= sel_core_b_d;
         rr_ptr_q       <= rr_ptr_d;
-        resp_valid_a_q <= resp_valid_a_d;
-        resp_valid_b_q <= resp_valid_b_d;
-        resp_core_a_q  <= resp_core_a_d;
-        resp_core_b_q  <= resp_core_b_d;
-        resp_is_sc_a_q <= resp_is_sc_a_d;
-        resp_is_sc_b_q <= resp_is_sc_b_d;
+        ret_valid_a_q <= ret_valid_a_d;
+        ret_valid_b_q <= ret_valid_b_d;
+        ret_core_a_q  <= ret_core_a_d;
+        ret_core_b_q  <= ret_core_b_d;
+        ret_is_sc_a_q <= ret_is_sc_a_d;
+        ret_is_sc_b_q <= ret_is_sc_b_d;
 
         for (j = 0; j < NCORES; j = j + 1) begin
             stall_q[j]             <= stall_d[j];
