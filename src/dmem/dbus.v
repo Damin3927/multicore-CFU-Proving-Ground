@@ -87,10 +87,10 @@ module dbus_dmem #(
     reg [$clog2(NCORES)-1:0] sel_core_a_d;
     reg [$clog2(NCORES)-1:0] sel_core_b_q = 'd0; // second selected core index
     reg [$clog2(NCORES)-1:0] sel_core_b_d;
-    wire [$clog2(NCORES)-1:0] sel_core_a_logic;
-    wire [$clog2(NCORES)-1:0] sel_core_b_logic;
-    wire sel_valid_a_logic;
-    wire sel_valid_b_logic;
+    wire [$clog2(NCORES)-1:0] sel_core_a_arb;
+    wire [$clog2(NCORES)-1:0] sel_core_b_arb;
+    wire sel_valid_a_arb;
+    wire sel_valid_b_arb;
 
     reg being_served [0:NCORES-1];
 
@@ -143,10 +143,10 @@ module dbus_dmem #(
         .rr_ptr_i         (rr_ptr_q),
         .req_valid_i      (req_valid_packed),
         .req_addr_packed_i(req_addr_packed),
-        .valid_a_o        (sel_valid_a_logic),
-        .valid_b_o        (sel_valid_b_logic),
-        .selector_a_o     (sel_core_a_logic),
-        .selector_b_o     (sel_core_b_logic)
+        .valid_a_o        (sel_valid_a_arb),
+        .valid_b_o        (sel_valid_b_arb),
+        .selector_a_o     (sel_core_a_arb),
+        .selector_b_o     (sel_core_b_arb)
     );
 
     // FSM handshake per port: IDLE -> RSVCHECK -> ACCESS -> RESP
@@ -157,14 +157,14 @@ module dbus_dmem #(
     wire resp_valid_a;
     wire resp_valid_b;
 
-    assign select_a_fire = (state_a_q == IDLE) && sel_valid_a_logic;
-    assign select_b_fire = (state_b_q == IDLE) && sel_valid_b_logic
-                        && ((state_a_q == IDLE) || (sel_core_b_logic != sel_core_a_q))
-                        && (!select_a_fire || (sel_core_b_logic != sel_core_a_logic));
+    assign select_a_fire = (state_a_q == IDLE) && sel_valid_a_arb;
+    assign select_b_fire = (state_b_q == IDLE) && sel_valid_b_arb
+                        && ((state_a_q == IDLE) || (sel_core_b_arb != sel_core_a_q))
+                        && (!select_a_fire || (sel_core_b_arb != sel_core_a_arb));
     assign access_valid_a = (state_a_q == ACCESS);
     assign access_valid_b = (state_b_q == ACCESS);
-    assign resp_valid_a     = (state_a_q == RESP);
-    assign resp_valid_b     = (state_b_q == RESP);
+    assign resp_valid_a   = (state_a_q == RESP);
+    assign resp_valid_b   = (state_b_q == RESP);
 
     always @(*) begin
         state_a_d    = state_a_q;
@@ -203,9 +203,8 @@ module dbus_dmem #(
             reservation_valid_d[k]   = reservation_valid_q[k];
             reservation_addr_d[k]    = reservation_addr_q[k];
             rsvcheck_sc_success_d[k] = rsvcheck_sc_success_q[k];
-
             being_served[k]          = (access_valid_a && sel_core_a_q == k)
-                                    || (access_valid_b && sel_core_b_q == k);
+                                       || (access_valid_b && sel_core_b_q == k);
 
             if (!req_valid_q[k]) begin
                 req_valid_d[k] = (addr[k] != 32'h0);
@@ -231,8 +230,12 @@ module dbus_dmem #(
         case (state_a_q)
             IDLE: begin
                 if (select_a_fire) begin
-                    sel_core_a_d = sel_core_a_logic;
-                    state_a_d    = RSVCHECK;
+                    if (req_re_q[sel_core_a_arb] && !req_is_lr_q[sel_core_a_arb]) begin // simple load
+                        state_a_d = ACCESS;
+                    end else begin
+                        state_a_d = RSVCHECK;
+                    end
+                    sel_core_a_d = sel_core_a_arb;
                 end
             end
             RSVCHECK: begin
@@ -281,8 +284,12 @@ module dbus_dmem #(
         case (state_b_q)
             IDLE: begin
                 if (select_b_fire) begin
-                    sel_core_b_d = sel_core_b_logic;
-                    state_b_d    = RSVCHECK;
+                    if (req_re_q[sel_core_b_arb] && !req_is_lr_q[sel_core_b_arb]) begin // simple load
+                        state_b_d = ACCESS;
+                    end else begin
+                        state_b_d = RSVCHECK;
+                    end
+                    sel_core_b_d = sel_core_b_arb;
                 end
             end
             RSVCHECK: begin
@@ -328,9 +335,9 @@ module dbus_dmem #(
             end
         endcase
 
-        if ((state_a_q == RSVCHECK) && (state_b_q == RSVCHECK)) begin
+        if (access_valid_a && access_valid_b) begin
             rr_ptr_d = (sel_core_b_q + 1) % NCORES;
-        end else if (state_a_q == RSVCHECK) begin
+        end else if (access_valid_a) begin
             rr_ptr_d = (sel_core_a_q + 1) % NCORES;
         end
     end
