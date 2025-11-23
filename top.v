@@ -2,6 +2,7 @@
 / Released under the MIT license https://opensource.org/licenses/mit           */
 
 `default_nettype none
+`timescale 1 ns / 1 ps
 
 // `define TIMEOUT_CYCLES 200000
 
