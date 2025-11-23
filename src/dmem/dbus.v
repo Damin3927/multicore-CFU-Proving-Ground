@@ -86,6 +86,12 @@ module dbus_dmem #(
     reg [$clog2(NCORES)-1:0] sel_core_a_d;
     reg [$clog2(NCORES)-1:0] sel_core_b_q = 'd0; // second selected core index
     reg [$clog2(NCORES)-1:0] sel_core_b_d;
+
+    reg [31:0] sel_addr_a_q;
+    reg [31:0] sel_addr_a_d;
+    reg [31:0] sel_addr_b_q;
+    reg [31:0] sel_addr_b_d;
+
     wire [$clog2(NCORES)-1:0] sel_core_a_arb;
     wire [$clog2(NCORES)-1:0] sel_core_b_arb;
     wire sel_valid_a_arb;
@@ -167,15 +173,17 @@ module dbus_dmem #(
     always @(*) begin
         state_a_d       = state_a_q;
         sel_core_a_d    = sel_core_a_q;
+        sel_addr_a_d    = sel_addr_a_q;
         state_b_d       = state_b_q;
         sel_core_b_d    = sel_core_b_q;
+        sel_addr_b_d    = sel_addr_b_q;
         rr_ptr_d        = rr_ptr_q;
-        ret_valid_a_d  = ret_valid_a_q;
-        ret_valid_b_d  = ret_valid_b_q;
-        ret_core_a_d   = ret_core_a_q;
-        ret_core_b_d   = ret_core_b_q;
-        ret_is_sc_a_d  = ret_is_sc_a_q;
-        ret_is_sc_b_d  = ret_is_sc_b_q;
+        ret_valid_a_d   = ret_valid_a_q;
+        ret_valid_b_d   = ret_valid_b_q;
+        ret_core_a_d    = ret_core_a_q;
+        ret_core_b_d    = ret_core_b_q;
+        ret_is_sc_a_d   = ret_is_sc_a_q;
+        ret_is_sc_b_d   = ret_is_sc_b_q;
         rea_int         = 1'b0;
         reb_int         = 1'b0;
         wea_int         = 1'b0;
@@ -236,6 +244,7 @@ module dbus_dmem #(
                         state_a_d = RSVCHECK;
                     end
                     sel_core_a_d = sel_core_a_arb;
+                    sel_addr_a_d = req_addr_q[sel_core_a_arb];
                 end
 
                 if (ret_valid_a_q) begin
@@ -247,19 +256,19 @@ module dbus_dmem #(
                 state_a_d = ACCESS;
                 if (req_re_q[sel_core_a_q] && req_is_lr_q[sel_core_a_q]) begin
                     reservation_valid_d[sel_core_a_q] = 1'b1;
-                    reservation_addr_d[sel_core_a_q]  = req_addr_q[sel_core_a_q];
+                    reservation_addr_d[sel_core_a_q]  = sel_addr_a_q;
                 end else if (req_we_q[sel_core_a_q] && req_is_sc_q[sel_core_a_q]) begin
-                    rsvcheck_sc_success_d[sel_core_a_q] = reservation_valid_q[sel_core_a_q] && (reservation_addr_q[sel_core_a_q] == req_addr_q[sel_core_a_q]);
+                    rsvcheck_sc_success_d[sel_core_a_q] = reservation_valid_q[sel_core_a_q] && (reservation_addr_q[sel_core_a_q] == sel_addr_a_q);
                     if (rsvcheck_sc_success_d[sel_core_a_q]) begin
                         for (m = 0; m < NCORES; m = m + 1) begin
-                            if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_a_q]) begin
+                            if (reservation_valid_q[m] && reservation_addr_q[m] == sel_addr_a_q) begin
                                 reservation_valid_d[m] = 1'b0;
                             end
                         end
                     end
                 end else if (req_we_q[sel_core_a_q] && !req_is_sc_q[sel_core_a_q]) begin
                     for (m = 0; m < NCORES; m = m + 1) begin
-                        if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_a_q]) begin
+                        if (reservation_valid_q[m] && reservation_addr_q[m] == sel_addr_a_q) begin
                             reservation_valid_d[m] = 1'b0;
                         end
                     end
@@ -272,7 +281,7 @@ module dbus_dmem #(
                 ret_is_sc_a_d  = req_is_sc_q[sel_core_a_q];
                 rea_int        = req_re_q[sel_core_a_q];
                 wea_int        = req_we_q[sel_core_a_q] && (req_is_sc_q[sel_core_a_q] ? rsvcheck_sc_success_q[sel_core_a_q] : 1'b1);
-                addra_int      = req_addr_q[sel_core_a_q];
+                addra_int      = sel_addr_a_q;
                 wdataa_int     = req_wdata_q[sel_core_a_q];
                 wstrba_int     = req_wstrb_q[sel_core_a_q];
             end
@@ -290,6 +299,7 @@ module dbus_dmem #(
                         state_b_d = RSVCHECK;
                     end
                     sel_core_b_d = sel_core_b_arb;
+                    sel_addr_b_d = req_addr_q[sel_core_b_arb];
                 end
 
                 if (ret_valid_b_q) begin
@@ -301,19 +311,19 @@ module dbus_dmem #(
                 state_b_d = ACCESS;
                 if (req_re_q[sel_core_b_q] && req_is_lr_q[sel_core_b_q]) begin
                     reservation_valid_d[sel_core_b_q] = 1'b1;
-                    reservation_addr_d[sel_core_b_q]  = req_addr_q[sel_core_b_q];
+                    reservation_addr_d[sel_core_b_q]  = sel_addr_b_q;
                 end else if (req_we_q[sel_core_b_q] && req_is_sc_q[sel_core_b_q]) begin
-                    rsvcheck_sc_success_d[sel_core_b_q] = reservation_valid_q[sel_core_b_q] && (reservation_addr_q[sel_core_b_q] == req_addr_q[sel_core_b_q]);
+                    rsvcheck_sc_success_d[sel_core_b_q] = reservation_valid_q[sel_core_b_q] && (reservation_addr_q[sel_core_b_q] == sel_addr_b_q);
                     if (rsvcheck_sc_success_d[sel_core_b_q]) begin
                         for (m = 0; m < NCORES; m = m + 1) begin
-                            if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_b_q]) begin
+                            if (reservation_valid_q[m] && reservation_addr_q[m] == sel_addr_b_q) begin
                                 reservation_valid_d[m] = 1'b0;
                             end
                         end
                     end
                 end else if (req_we_q[sel_core_b_q] && !req_is_sc_q[sel_core_b_q]) begin
                     for (m = 0; m < NCORES; m = m + 1) begin
-                        if (reservation_valid_q[m] && reservation_addr_q[m] == req_addr_q[sel_core_b_q]) begin
+                        if (reservation_valid_q[m] && reservation_addr_q[m] == sel_addr_b_q) begin
                             reservation_valid_d[m] = 1'b0;
                         end
                     end
@@ -326,7 +336,7 @@ module dbus_dmem #(
                 ret_is_sc_b_d  = req_is_sc_q[sel_core_b_q];
                 reb_int        = req_re_q[sel_core_b_q];
                 web_int        = req_we_q[sel_core_b_q] && (req_is_sc_q[sel_core_b_q] ? rsvcheck_sc_success_q[sel_core_b_q] : 1'b1);
-                addrb_int      = req_addr_q[sel_core_b_q];
+                addrb_int      = sel_addr_b_q;
                 wdatab_int     = req_wdata_q[sel_core_b_q];
                 wstrbb_int     = req_wstrb_q[sel_core_b_q];
             end
@@ -343,11 +353,13 @@ module dbus_dmem #(
     end
 
     always @(posedge clk_i) begin
-        state_a_q    <= state_a_d;
-        state_b_q    <= state_b_d;
-        sel_core_a_q <= sel_core_a_d;
-        sel_core_b_q <= sel_core_b_d;
-        rr_ptr_q       <= rr_ptr_d;
+        state_a_q     <= state_a_d;
+        state_b_q     <= state_b_d;
+        sel_core_a_q  <= sel_core_a_d;
+        sel_core_b_q  <= sel_core_b_d;
+        sel_addr_a_q  <= sel_addr_a_d;
+        sel_addr_b_q  <= sel_addr_b_d;
+        rr_ptr_q      <= rr_ptr_d;
         ret_valid_a_q <= ret_valid_a_d;
         ret_valid_b_q <= ret_valid_b_d;
         ret_core_a_q  <= ret_core_a_d;
