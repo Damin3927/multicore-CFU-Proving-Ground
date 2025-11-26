@@ -4,14 +4,15 @@
 `include "config.vh"
 
 module dbus_vmem #(
-    parameter NCORES = `NCORES
+    parameter NCORES = `NCORES,
+    parameter VMEM_ADDRW = `VMEM_ADDRW
 ) (
     input wire clk_i,
     input wire [NCORES-1:0] we_packed_i,
-    input wire [32*NCORES-1:0] addr_packed_i,
+    input wire [VMEM_ADDRW*NCORES-1:0] addr_packed_i,
     input wire [32*NCORES-1:0] wdata_packed_i,
     output wire [NCORES-1:0] stall_packed_o,
-    input wire [`VMEM_ADDRW-1:0] disp_raddr_i,
+    input wire [VMEM_ADDRW-1:0] disp_raddr_i,
     output wire [2:0] disp_rdata_o
 );
     genvar i;
@@ -27,31 +28,31 @@ module dbus_vmem #(
     reg [$clog2(STATE_WIDTH)-1:0] state_d;
 
     // Unpack input arrays
-    wire        we   [0:NCORES-1];
-    wire [31:0] addr [0:NCORES-1];
-    wire [31:0] wdata[0:NCORES-1];
-    reg         stall_q [0:NCORES-1];
-    reg         stall_d [0:NCORES-1];
+    wire                  we   [0:NCORES-1];
+    wire [VMEM_ADDRW-1:0] addr [0:NCORES-1];
+    wire [31:0]           wdata[0:NCORES-1];
+    reg                   stall_q [0:NCORES-1];
+    reg                   stall_d [0:NCORES-1];
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
             assign we[i]    = we_packed_i[i];
-            assign addr[i]  = addr_packed_i[32*(i+1)-1:32*i];
+            assign addr[i]  = addr_packed_i[VMEM_ADDRW*(i+1)-1:VMEM_ADDRW*i];
             assign wdata[i] = wdata_packed_i[32*(i+1)-1:32*i];
             assign stall_packed_o[i] = stall_q[i];
         end
     endgenerate
 
     // Reserved request registers for each core
-    reg        req_valid_q [0:NCORES-1];  // request is pending
-    reg        req_we_q    [0:NCORES-1];
-    reg [31:0] req_addr_q  [0:NCORES-1];
-    reg [31:0] req_wdata_q [0:NCORES-1];
+    reg                  req_valid_q [0:NCORES-1];  // request is pending
+    reg                  req_we_q    [0:NCORES-1];
+    reg [VMEM_ADDRW-1:0] req_addr_q  [0:NCORES-1];
+    reg [31:0]           req_wdata_q [0:NCORES-1];
 
-    reg        req_valid_d [0:NCORES-1];
-    reg        req_we_d    [0:NCORES-1];
-    reg [31:0] req_addr_d  [0:NCORES-1];
-    reg [31:0] req_wdata_d [0:NCORES-1];
+    reg                  req_valid_d [0:NCORES-1];
+    reg                  req_we_d    [0:NCORES-1];
+    reg [VMEM_ADDRW-1:0] req_addr_d  [0:NCORES-1];
+    reg [31:0]           req_wdata_d [0:NCORES-1];
 
     // Round-robin state
     reg [$clog2(NCORES)-1:0] rr_ptr_q = 0;  // points to next core to serve
@@ -60,8 +61,8 @@ module dbus_vmem #(
     // Selected core
     reg [$clog2(NCORES)-1:0] sel_core_q = 'd0;
     reg [$clog2(NCORES)-1:0] sel_core_d;
-    reg [31:0] sel_addr_q;
-    reg [31:0] sel_addr_d;
+    reg [VMEM_ADDRW-1:0] sel_addr_q;
+    reg [VMEM_ADDRW-1:0] sel_addr_d;
 
     wire [$clog2(NCORES)-1:0] sel_core_arb;
     wire sel_valid_arb;
@@ -69,7 +70,7 @@ module dbus_vmem #(
     reg being_served [0:NCORES-1];
 
     reg we_int;
-    reg [`VMEM_ADDRW-1:0] addr_int;
+    reg [VMEM_ADDRW-1:0] addr_int;
     reg [2:0] wdata_int;
 
     // Select cores in round-robin fashion
@@ -99,11 +100,11 @@ module dbus_vmem #(
         sel_addr_d = sel_addr_q;
         rr_ptr_d   = rr_ptr_q;
         we_int     = 1'b0;
-        addr_int   = {`VMEM_ADDRW{1'b0}};
+        addr_int   = {VMEM_ADDRW{1'b0}};
         wdata_int  = 3'h0;
 
         for (k = 0; k < NCORES; k = k + 1) begin
-            stall_d[k]      = (addr[k] != 32'h0) || (req_valid_q[k]);
+            stall_d[k]      = we[k] || (req_valid_q[k]);
             req_valid_d[k]  = req_valid_q[k];
             req_we_d[k]     = req_we_q[k];
             req_addr_d[k]   = req_addr_q[k];
@@ -111,14 +112,14 @@ module dbus_vmem #(
             being_served[k] = (is_access && sel_core_q == k);
 
             if (!req_valid_q[k]) begin
-                req_valid_d[k]  = (addr[k] != 32'h0);
+                req_valid_d[k]  = we[k];
                 req_we_d[k]     = we[k];
                 req_addr_d[k]   = addr[k];
                 req_wdata_d[k]  = wdata[k];
             end else if (being_served[k]) begin
                 req_valid_d[k]  = 1'b0;
                 req_we_d[k]     = 1'b0;
-                req_addr_d[k]   = 32'h0;
+                req_addr_d[k]   = {VMEM_ADDRW{1'b0}};
                 req_wdata_d[k]  = 32'h0;
             end
         end
@@ -134,7 +135,7 @@ module dbus_vmem #(
             ACCESS: begin
                 state_d    = IDLE;
                 we_int     = req_we_q[sel_core_q];
-                addr_int   = sel_addr_q[`VMEM_ADDRW-1:0];
+                addr_int   = sel_addr_q[VMEM_ADDRW-1:0];
                 wdata_int  = req_wdata_q[sel_core_q][2:0];
             end
             default: begin

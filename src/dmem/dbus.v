@@ -2,12 +2,13 @@
 `default_nettype none
 
 module dbus_dmem #(
-    parameter NCORES = `NCORES
+    parameter NCORES = `NCORES,
+    parameter DMEM_ADDRW = `DMEM_ADDRW
 ) (
     input wire clk_i,
     input wire [NCORES-1:0] re_packed_i,
     input wire [NCORES-1:0] we_packed_i,
-    input wire [32*NCORES-1:0] addr_packed_i,
+    input wire [DMEM_ADDRW*NCORES-1:0] addr_packed_i,
     input wire [32*NCORES-1:0] wdata_packed_i,
     input wire [4*NCORES-1:0] wstrb_packed_i,
     input wire [NCORES-1:0] is_lr_packed_i,
@@ -32,24 +33,24 @@ module dbus_dmem #(
     reg [$clog2(STATE_WIDTH)-1:0] state_b_d;
 
     // Unpack input arrays
-    wire        re   [0:NCORES-1];
-    wire        we   [0:NCORES-1];
-    wire [31:0] addr [0:NCORES-1];
-    wire [31:0] wdata[0:NCORES-1];
-    wire [3:0]  wstrb[0:NCORES-1];
-    wire        is_lr[0:NCORES-1];
-    wire        is_sc[0:NCORES-1];
-    reg  [31:0] rdata_q [0:NCORES-1];
-    reg         stall_q [0:NCORES-1];
+    wire                  re   [0:NCORES-1];
+    wire                  we   [0:NCORES-1];
+    wire [DMEM_ADDRW-1:0] addr [0:NCORES-1];
+    wire [31:0]           wdata[0:NCORES-1];
+    wire [3:0]            wstrb[0:NCORES-1];
+    wire                  is_lr[0:NCORES-1];
+    wire                  is_sc[0:NCORES-1];
+    reg  [31:0]           rdata_q [0:NCORES-1];
+    reg                   stall_q [0:NCORES-1];
 
-    reg  [31:0] rdata_d [0:NCORES-1];
-    reg         stall_d [0:NCORES-1];
+    reg  [31:0]           rdata_d [0:NCORES-1];
+    reg                   stall_d [0:NCORES-1];
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
             assign re[i]    = re_packed_i[i];
             assign we[i]    = we_packed_i[i];
-            assign addr[i]  = addr_packed_i[32*(i+1)-1:32*i];
+            assign addr[i]  = addr_packed_i[DMEM_ADDRW*(i+1)-1:DMEM_ADDRW*i];
             assign wdata[i] = wdata_packed_i[32*(i+1)-1:32*i];
             assign wstrb[i] = wstrb_packed_i[4*(i+1)-1:4*i];
             assign is_lr[i] = is_lr_packed_i[i];
@@ -60,23 +61,23 @@ module dbus_dmem #(
     endgenerate
 
     // Reserved request registers for each core
-    reg        req_valid_q [0:NCORES-1];  // request is pending
-    reg        req_re_q    [0:NCORES-1];
-    reg        req_we_q    [0:NCORES-1];
-    reg [31:0] req_addr_q  [0:NCORES-1];
-    reg [31:0] req_wdata_q [0:NCORES-1];
-    reg [3:0]  req_wstrb_q [0:NCORES-1];
-    reg        req_is_lr_q [0:NCORES-1];
-    reg        req_is_sc_q [0:NCORES-1];
+    reg                  req_valid_q [0:NCORES-1];  // request is pending
+    reg                  req_re_q    [0:NCORES-1];
+    reg                  req_we_q    [0:NCORES-1];
+    reg [DMEM_ADDRW-1:0] req_addr_q  [0:NCORES-1];
+    reg [31:0]           req_wdata_q [0:NCORES-1];
+    reg [3:0]            req_wstrb_q [0:NCORES-1];
+    reg                  req_is_lr_q [0:NCORES-1];
+    reg                  req_is_sc_q [0:NCORES-1];
 
-    reg        req_valid_d [0:NCORES-1];
-    reg        req_re_d    [0:NCORES-1];
-    reg        req_we_d    [0:NCORES-1];
-    reg [31:0] req_addr_d  [0:NCORES-1];
-    reg [31:0] req_wdata_d [0:NCORES-1];
-    reg [3:0]  req_wstrb_d [0:NCORES-1];
-    reg        req_is_lr_d [0:NCORES-1];
-    reg        req_is_sc_d [0:NCORES-1];
+    reg                  req_valid_d [0:NCORES-1];
+    reg                  req_re_d    [0:NCORES-1];
+    reg                  req_we_d    [0:NCORES-1];
+    reg [DMEM_ADDRW-1:0] req_addr_d  [0:NCORES-1];
+    reg [31:0]           req_wdata_d [0:NCORES-1];
+    reg [3:0]            req_wstrb_d [0:NCORES-1];
+    reg                  req_is_lr_d [0:NCORES-1];
+    reg                  req_is_sc_d [0:NCORES-1];
 
     // Round-robin state
     reg [$clog2(NCORES)-1:0] rr_ptr_q = 0;  // points to next core to serve
@@ -87,10 +88,10 @@ module dbus_dmem #(
     reg [$clog2(NCORES)-1:0] sel_core_b_q = 'd0; // second selected core index
     reg [$clog2(NCORES)-1:0] sel_core_b_d;
 
-    reg [31:0] sel_addr_a_q;
-    reg [31:0] sel_addr_a_d;
-    reg [31:0] sel_addr_b_q;
-    reg [31:0] sel_addr_b_d;
+    reg [DMEM_ADDRW-1:0] sel_addr_a_q;
+    reg [DMEM_ADDRW-1:0] sel_addr_a_d;
+    reg [DMEM_ADDRW-1:0] sel_addr_b_q;
+    reg [DMEM_ADDRW-1:0] sel_addr_b_d;
 
     wire [$clog2(NCORES)-1:0] sel_core_a_arb;
     wire [$clog2(NCORES)-1:0] sel_core_b_arb;
@@ -100,24 +101,24 @@ module dbus_dmem #(
     reg being_served [0:NCORES-1];
 
     // LR/SC reservation
-    reg        reservation_valid_q   [0:NCORES-1];
-    reg [31:0] reservation_addr_q    [0:NCORES-1];
-    reg        rsvcheck_sc_success_q [0:NCORES-1];
+    reg                  reservation_valid_q   [0:NCORES-1];
+    reg [DMEM_ADDRW-1:0] reservation_addr_q    [0:NCORES-1];
+    reg                  rsvcheck_sc_success_q [0:NCORES-1];
 
-    reg        reservation_valid_d   [0:NCORES-1];
-    reg [31:0] reservation_addr_d    [0:NCORES-1];
-    reg        rsvcheck_sc_success_d [0:NCORES-1];
+    reg                  reservation_valid_d   [0:NCORES-1];
+    reg [DMEM_ADDRW-1:0] reservation_addr_d    [0:NCORES-1];
+    reg                  rsvcheck_sc_success_d [0:NCORES-1];
 
     reg rea_int;
     reg reb_int;
     reg wea_int;
     reg web_int;
-    reg [31:0] addra_int;
-    reg [31:0] addrb_int;
-    reg [31:0] wdataa_int;
-    reg [31:0] wdatab_int;
-    reg [3:0]  wstrba_int;
-    reg [3:0]  wstrbb_int;
+    reg [DMEM_ADDRW-1:0] addra_int;
+    reg [DMEM_ADDRW-1:0] addrb_int;
+    reg [31:0]           wdataa_int;
+    reg [31:0]           wdatab_int;
+    reg [3:0]            wstrba_int;
+    reg [3:0]            wstrbb_int;
 
     wire [31:0] rdataa_dmem;
     wire [31:0] rdatab_dmem;
@@ -140,11 +141,11 @@ module dbus_dmem #(
 
     // Select cores in round-robin fashion
     wire [NCORES-1:0] req_valid_packed;
-    wire [NCORES*32-1:0] req_addr_packed;
+    wire [NCORES*DMEM_ADDRW-1:0] req_addr_packed;
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : pack_req_inputs
             assign req_valid_packed[i] = req_valid_q[i];
-            assign req_addr_packed[32*(i+1)-1:32*i] = req_addr_q[i];
+            assign req_addr_packed[DMEM_ADDRW*(i+1)-1:DMEM_ADDRW*i] = req_addr_q[i];
         end
     endgenerate
 
@@ -196,7 +197,7 @@ module dbus_dmem #(
         wstrbb_int      = 4'h0;
 
         for (k = 0; k < NCORES; k = k + 1) begin
-            stall_d[k]               = (addr[k] != 32'h0) // new request arrives
+            stall_d[k]               = (re[k] || we[k]) // new request arrives
                                        || (req_valid_q[k]); // pending request
             rdata_d[k]               = (ret_valid_a_q && ret_core_a_q == k) ? (ret_is_sc_a_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdataa_dmem) :
                                        (ret_valid_b_q && ret_core_b_q == k) ? (ret_is_sc_b_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdatab_dmem) : 32'h0;
@@ -215,7 +216,7 @@ module dbus_dmem #(
                                        || (is_access_b && sel_core_b_q == k);
 
             if (!req_valid_q[k]) begin
-                req_valid_d[k] = (addr[k] != 32'h0);
+                req_valid_d[k] = (re[k] || we[k]);
                 req_re_d[k]    = re[k];
                 req_we_d[k]    = we[k];
                 req_addr_d[k]  = addr[k];
