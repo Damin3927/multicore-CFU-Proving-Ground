@@ -22,6 +22,7 @@ all: prog build
 src_dir := src
 cfu_dir := cfu
 srcs += $(wildcard *.v)
+srcs += $(wildcard *.vh)
 srcs += $(wildcard $(src_dir)/*.v)
 srcs += $(wildcard $(src_dir)/cpu/*.v)
 srcs += $(wildcard $(src_dir)/dmem/*.v)

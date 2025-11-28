@@ -1,28 +1,31 @@
 `resetall
 `default_nettype none
 
-module vmem (
+module vmem #(
+    parameter VMEM_ADDRW = `VMEM_ADDRW,
+    parameter VMEM_ENTRIES = `VMEM_ENTRIES
+) (
     input  wire                   clk_i,
     input  wire                   we_i,
-    input  wire [`VMEM_ADDRW-1:0] waddr_i,
+    input  wire [VMEM_ADDRW-1:0] waddr_i,
     input  wire             [2:0] wdata_i,
-    input  wire [`VMEM_ADDRW-1:0] raddr_i,
+    input  wire [VMEM_ADDRW-1:0] raddr_i,
     output wire             [2:0] rdata_o
 );
 
-    reg [2:0] vmem[0:`VMEM_ENTRIES-1];
+    reg [2:0] vmem[0:VMEM_ENTRIES-1];
     integer i;
     initial begin
-        for (i = 0; i < `VMEM_ENTRIES; i = i + 1) begin
+        for (i = 0; i < VMEM_ENTRIES; i = i + 1) begin
             vmem[i] = 0;
         end
     end
 
-    reg                   we;
-    reg             [2:0] wdata;
-    reg [`VMEM_ADDRW-1:0] waddr;
-    reg [`VMEM_ADDRW-1:0] raddr;
-    reg             [2:0] rdata;
+    reg                  we;
+    reg            [2:0] wdata;
+    reg [VMEM_ADDRW-1:0] waddr;
+    reg [VMEM_ADDRW-1:0] raddr;
+    reg            [2:0] rdata;
 
     always @(posedge clk_i) begin
         we    <= we_i;
@@ -40,10 +43,10 @@ module vmem (
     assign rdata_o = rdata;
 
 `ifndef SYNTHESIS
-    reg  [`VMEM_ADDRW-1:0] r_adr_p = 0;
-    reg  [`VMEM_ADDRW-1:0] r_dat_p = 0;
+    reg  [VMEM_ADDRW-1:0] r_adr_p = 0;
+    reg  [VMEM_ADDRW-1:0] r_dat_p = 0;
 
-    wire [`VMEM_ADDRW-1:0] data = {{5{wdata_i[2]}}, {6{wdata_i[1]}}, {5{wdata_i[0]}}};
+    wire [VMEM_ADDRW-1:0] data = {{5{wdata_i[2]}}, {6{wdata_i[1]}}, {5{wdata_i[0]}}};
     always @(posedge clk_i)
         if (we_i) begin
             if (vmem[waddr_i] != wdata_i) begin

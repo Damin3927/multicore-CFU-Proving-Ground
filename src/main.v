@@ -5,7 +5,16 @@
 
 `include "config.vh"
 
-module main (
+module main #(
+    parameter IBUS_ADDR_WIDTH = `IBUS_ADDR_WIDTH,
+    parameter IBUS_DATA_WIDTH = `IBUS_DATA_WIDTH,
+    parameter DBUS_ADDR_WIDTH = `DBUS_ADDR_WIDTH,
+    parameter DBUS_DATA_WIDTH = `DBUS_DATA_WIDTH,
+    parameter DBUS_STRB_WIDTH = `DBUS_STRB_WIDTH,
+    parameter DMEM_ADDRW = `DMEM_ADDRW,
+    parameter VMEM_ADDRW = `VMEM_ADDRW,
+    parameter NCORES     = `NCORES
+) (
     input  wire clk_i,
     output wire st7789_SDA,
     output wire st7789_SCL,
@@ -27,54 +36,54 @@ module main (
     assign locked = 1'b1;
 `endif
 
-    wire                        rst = !rst_ni || !locked;
-    wire [`IBUS_ADDR_WIDTH-1:0] imem_raddr [0:`NCORES-1];
-    wire [`IBUS_DATA_WIDTH-1:0] imem_rdata [0:`NCORES-1];
-    wire                        dbus_we   [0:`NCORES-1];
-    wire [`DBUS_ADDR_WIDTH-1:0] dbus_addr [0:`NCORES-1];
-    wire [`DBUS_DATA_WIDTH-1:0] dbus_wdata[0:`NCORES-1];
-    wire [`DBUS_STRB_WIDTH-1:0] dbus_wstrb[0:`NCORES-1];
-    wire                        dbus_is_lr[0:`NCORES-1];
-    wire                        dbus_is_sc[0:`NCORES-1];
-    wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata[0:`NCORES-1];
-    wire                        dbus_stall[0:`NCORES-1];
+    wire                       rst = !rst_ni || !locked;
+    wire [IBUS_ADDR_WIDTH-1:0] imem_raddr [0:NCORES-1];
+    wire [IBUS_DATA_WIDTH-1:0] imem_rdata [0:NCORES-1];
+    wire                       dbus_we   [0:NCORES-1];
+    wire [DBUS_ADDR_WIDTH-1:0] dbus_addr [0:NCORES-1];
+    wire [DBUS_DATA_WIDTH-1:0] dbus_wdata[0:NCORES-1];
+    wire [DBUS_STRB_WIDTH-1:0] dbus_wstrb[0:NCORES-1];
+    wire                       dbus_is_lr[0:NCORES-1];
+    wire                       dbus_is_sc[0:NCORES-1];
+    wire [DBUS_DATA_WIDTH-1:0] dbus_rdata[0:NCORES-1];
+    wire                       dbus_stall[0:NCORES-1];
 
-    wire [31:0] hart_rdata[0:`NCORES-1];
+    wire [31:0] hart_rdata[0:NCORES-1];
 
-    wire        dmem_we   [0:`NCORES-1];
-    wire        dmem_re   [0:`NCORES-1];
-    wire [31:0] dmem_addr [0:`NCORES-1];
-    wire [31:0] dmem_wdata[0:`NCORES-1];
-    wire [3:0]  dmem_wstrb[0:`NCORES-1];
-    wire [31:0] dmem_rdata[0:`NCORES-1];
+    wire                       dmem_we    [0:NCORES-1];
+    wire                       dmem_re    [0:NCORES-1];
+    wire [DMEM_ADDRW-1:0]      dmem_addr  [0:NCORES-1];
+    wire                [31:0] dmem_wdata [0:NCORES-1];
+    wire                [3:0]  dmem_wstrb [0:NCORES-1];
+    wire                [31:0] dmem_rdata [0:NCORES-1];
 
-    wire        vmem_we   [0:`NCORES-1];
-    wire [31:0] vmem_addr [0:`NCORES-1];
-    wire [31:0] vmem_wdata[0:`NCORES-1];
+    wire                  vmem_we    [0:NCORES-1];
+    wire [VMEM_ADDRW-1:0] vmem_addr  [0:NCORES-1];
+    wire           [31:0] vmem_wdata [0:NCORES-1];
 
     // Pack arrays for dbus_dmem module
-    wire [`NCORES-1:0] dmem_re_packed;
-    wire [`NCORES-1:0] dmem_we_packed;
-    wire [32*`NCORES-1:0] dmem_addr_packed;
-    wire [32*`NCORES-1:0] dmem_wdata_packed;
-    wire [4*`NCORES-1:0] dmem_wstrb_packed;
-    wire [`NCORES-1:0] dmem_is_lr_packed;
-    wire [`NCORES-1:0] dmem_is_sc_packed;
-    wire [32*`NCORES-1:0] dmem_rdata_packed;
-    wire [`NCORES-1:0] dbus_stall_packed;
+    wire [NCORES-1:0] dmem_re_packed;
+    wire [NCORES-1:0] dmem_we_packed;
+    wire [DMEM_ADDRW*NCORES-1:0] dmem_addr_packed;
+    wire [32*NCORES-1:0] dmem_wdata_packed;
+    wire [4*NCORES-1:0] dmem_wstrb_packed;
+    wire [NCORES-1:0] dmem_is_lr_packed;
+    wire [NCORES-1:0] dmem_is_sc_packed;
+    wire [32*NCORES-1:0] dmem_rdata_packed;
+    wire [NCORES-1:0] dbus_stall_packed;
 
     // Pack arrays for dbus_vmem module
-    wire [`NCORES-1:0] vmem_we_packed;
-    wire [32*`NCORES-1:0] vmem_addr_packed;
-    wire [32*`NCORES-1:0] vmem_wdata_packed;
-    wire [`NCORES-1:0] vmem_stall_packed;
+    wire [NCORES-1:0] vmem_we_packed;
+    wire [VMEM_ADDRW*NCORES-1:0] vmem_addr_packed;
+    wire [32*NCORES-1:0] vmem_wdata_packed;
+    wire [NCORES-1:0] vmem_stall_packed;
 
     genvar pack_idx;
     generate
-        for (pack_idx = 0; pack_idx < `NCORES; pack_idx = pack_idx + 1) begin
+        for (pack_idx = 0; pack_idx < NCORES; pack_idx = pack_idx + 1) begin
             assign dmem_re_packed[pack_idx] = dmem_re[pack_idx];
             assign dmem_we_packed[pack_idx] = dmem_we[pack_idx];
-            assign dmem_addr_packed[32*(pack_idx+1)-1:32*pack_idx] = dmem_addr[pack_idx];
+            assign dmem_addr_packed[DMEM_ADDRW*(pack_idx+1)-1:DMEM_ADDRW*pack_idx] = dmem_addr[pack_idx];
             assign dmem_wdata_packed[32*(pack_idx+1)-1:32*pack_idx] = dmem_wdata[pack_idx];
             assign dmem_wstrb_packed[4*(pack_idx+1)-1:4*pack_idx] = dmem_wstrb[pack_idx];
             assign dmem_is_lr_packed[pack_idx] = dbus_is_lr[pack_idx];
@@ -83,14 +92,14 @@ module main (
             assign dbus_stall[pack_idx] = dbus_stall_packed[pack_idx] | vmem_stall_packed[pack_idx];
 
             assign vmem_we_packed[pack_idx] = vmem_we[pack_idx];
-            assign vmem_addr_packed[32*(pack_idx+1)-1:32*pack_idx] = vmem_addr[pack_idx];
+            assign vmem_addr_packed[VMEM_ADDRW*(pack_idx+1)-1:VMEM_ADDRW*pack_idx] = vmem_addr[pack_idx];
             assign vmem_wdata_packed[32*(pack_idx+1)-1:32*pack_idx] = vmem_wdata[pack_idx];
         end
     endgenerate
 
     genvar i;
     generate
-        for (i = 0; i < `NCORES; i = i + 1) begin : gen_cpu
+        for (i = 0; i < NCORES; i = i + 1) begin : gen_cpu
             // Memory map address decoding:
             // 0x10000000 - 0x10003FFF (bit[28]=1, bit[29]=0, bit[30]=0): Data Memory
             // 0x20000000 - 0x2000FFFF (bit[29]=1, bit[30]=0): Video Memory
@@ -125,15 +134,15 @@ module main (
                 .clk_i        (clk),            // input  wire
                 .rst_i        (rst),            // input  wire
                 .stall_i      (dbus_stall[i]),  // input  wire
-                .ibus_araddr_o(imem_raddr[i]),  // output wire [`IBUS_ADDR_WIDTH-1:0]
-                .ibus_rdata_i (imem_rdata[i]),  // input  wire [`IBUS_DATA_WIDTH-1:0]
-                .dbus_addr_o  (dbus_addr[i]),   // output wire [`DBUS_ADDR_WIDTH-1:0]
+                .ibus_araddr_o(imem_raddr[i]),  // output wire [IBUS_ADDR_WIDTH-1:0]
+                .ibus_rdata_i (imem_rdata[i]),  // input  wire [IBUS_DATA_WIDTH-1:0]
+                .dbus_addr_o  (dbus_addr[i]),   // output wire [DBUS_ADDR_WIDTH-1:0]
                 .dbus_wvalid_o(dbus_we[i]),     // output wire
-                .dbus_wdata_o (dbus_wdata[i]),  // output wire [`DBUS_DATA_WIDTH-1:0]
-                .dbus_wstrb_o (dbus_wstrb[i]),  // output wire [`DBUS_STRB_WIDTH-1:0]
+                .dbus_wdata_o (dbus_wdata[i]),  // output wire [DBUS_DATA_WIDTH-1:0]
+                .dbus_wstrb_o (dbus_wstrb[i]),  // output wire [DBUS_STRB_WIDTH-1:0]
                 .dbus_is_lr_o (dbus_is_lr[i]),  // output wire
                 .dbus_is_sc_o (dbus_is_sc[i]),  // output wire
-                .dbus_rdata_i (dbus_rdata[i]),  // input  wire [`DBUS_DATA_WIDTH-1:0]
+                .dbus_rdata_i (dbus_rdata[i]),  // input  wire [DBUS_DATA_WIDTH-1:0]
                 .insnret      (insnret),        // output wire
                 .hart_index   (i)               // input  wire
             );
@@ -142,11 +151,11 @@ module main (
 
             assign dmem_re[i]    = in_dmem_range & !dbus_we[i];
             assign dmem_we[i]    = in_dmem_range & dbus_we[i];
-            assign dmem_addr[i]  = in_dmem_range ? dbus_addr[i] : 0;
+            assign dmem_addr[i]  = in_dmem_range ? dbus_addr[i][DMEM_ADDRW+1:2] : 0;
             assign dmem_wdata[i] = in_dmem_range ? dbus_wdata[i] : 0;
             assign dmem_wstrb[i] = in_dmem_range ? dbus_wstrb[i] : 0;
             assign vmem_we[i]    = in_vmem_range & dbus_we[i];
-            assign vmem_addr[i]  = in_vmem_range ? dbus_addr[i] : 0;
+            assign vmem_addr[i]  = in_vmem_range ? dbus_addr[i][VMEM_ADDRW-1:0] : 0;
             assign vmem_wdata[i] = in_vmem_range ? dbus_wdata[i] : 0;
 
             wire perf_we          = in_perf_range & dbus_we[i];
@@ -166,8 +175,8 @@ module main (
 
     genvar imem_idx;
     generate
-        for (imem_idx = 0; imem_idx < (`NCORES+1)/2; imem_idx = imem_idx + 1) begin : gen_imem
-            if (imem_idx*2 + 1 < `NCORES) begin
+        for (imem_idx = 0; imem_idx < (NCORES+1)/2; imem_idx = imem_idx + 1) begin : gen_imem
+            if (imem_idx*2 + 1 < NCORES) begin
                 m_imem imem (
                     .clk_i  (clk),                          // input  wire
                     .raddra_i(imem_raddr[imem_idx*2]),      // input  wire [ADDR_WIDTH-1:0]
@@ -201,9 +210,9 @@ module main (
         .stall_packed_o(dbus_stall_packed)   // output wire [NCORES-1:0]
     );
 
-    wire [`VMEM_ADDRW-1:0] vmem_disp_raddr;
-    wire             [2:0] vmem_disp_rdata_t;
-    wire [`VMEM_ADDRW-1:0] vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
+    wire [VMEM_ADDRW-1:0] vmem_disp_raddr;
+    wire            [2:0] vmem_disp_rdata_t;
+    wire [VMEM_ADDRW-1:0] vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
 
     dbus_vmem dbus_vmem (
         .clk_i          (clk),                // input  wire

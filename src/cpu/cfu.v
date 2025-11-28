@@ -2,7 +2,6 @@
 / Released under the MIT license https://opensource.org/licenses/mit           */
 
 `include "config.vh"
-`timescale 1 ns / 1 ps
 
 `ifndef USE_HLS
 

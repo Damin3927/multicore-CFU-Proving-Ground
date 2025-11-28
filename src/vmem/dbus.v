@@ -1,114 +1,165 @@
 `resetall
 `default_nettype none
 
+`include "config.vh"
+
 module dbus_vmem #(
-    parameter NCORES = `NCORES
+    parameter NCORES = `NCORES,
+    parameter VMEM_ADDRW = `VMEM_ADDRW
 ) (
     input wire clk_i,
     input wire [NCORES-1:0] we_packed_i,
-    input wire [32*NCORES-1:0] addr_packed_i,
+    input wire [VMEM_ADDRW*NCORES-1:0] addr_packed_i,
     input wire [32*NCORES-1:0] wdata_packed_i,
     output wire [NCORES-1:0] stall_packed_o,
-    input wire [`VMEM_ADDRW-1:0] disp_raddr_i,
+    input wire [VMEM_ADDRW-1:0] disp_raddr_i,
     output wire [2:0] disp_rdata_o
 );
     genvar i;
+    integer j;
+    integer k;
+
+    // Statemachine
+    localparam IDLE = 'd0;
+    localparam ACCESS = 'd1;
+    localparam STATE_WIDTH = 'd2;
+
+    reg [$clog2(STATE_WIDTH)-1:0] state_q = IDLE;
+    reg [$clog2(STATE_WIDTH)-1:0] state_d;
 
     // Unpack input arrays
-    wire        we   [0:NCORES-1];
-    wire [31:0] addr [0:NCORES-1];
-    wire [31:0] wdata[0:NCORES-1];
-    wire        stall[0:NCORES-1];
-    reg         stall_o   [0:NCORES-1];
+    wire                  we   [0:NCORES-1];
+    wire [VMEM_ADDRW-1:0] addr [0:NCORES-1];
+    wire [31:0]           wdata[0:NCORES-1];
+    reg                   stall_q [0:NCORES-1];
+    reg                   stall_d [0:NCORES-1];
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
             assign we[i]    = we_packed_i[i];
-            assign addr[i]  = addr_packed_i[32*(i+1)-1:32*i];
+            assign addr[i]  = addr_packed_i[VMEM_ADDRW*(i+1)-1:VMEM_ADDRW*i];
             assign wdata[i] = wdata_packed_i[32*(i+1)-1:32*i];
-            assign stall_packed_o[i] = stall_o[i];
+            assign stall_packed_o[i] = stall_q[i];
         end
     endgenerate
-
-    integer j;
-    always @(posedge clk_i) begin
-        for (j = 0; j < NCORES; j = j + 1) begin
-            stall_o[j] <= stall[j];
-        end
-    end
 
     // Reserved request registers for each core
-    reg        req_valid [0:NCORES-1];  // request is pending
-    reg        req_we [0:NCORES-1];
-    reg [31:0] req_addr [0:NCORES-1];
-    reg [31:0] req_wdata [0:NCORES-1];
+    reg                  req_valid_q [0:NCORES-1];  // request is pending
+    reg                  req_we_q    [0:NCORES-1];
+    reg [VMEM_ADDRW-1:0] req_addr_q  [0:NCORES-1];
+    reg [31:0]           req_wdata_q [0:NCORES-1];
+
+    reg                  req_valid_d [0:NCORES-1];
+    reg                  req_we_d    [0:NCORES-1];
+    reg [VMEM_ADDRW-1:0] req_addr_d  [0:NCORES-1];
+    reg [31:0]           req_wdata_d [0:NCORES-1];
 
     // Round-robin state
-    reg [$clog2(NCORES)-1:0] rr_ptr = 0;  // points to next core to serve
+    reg [$clog2(NCORES)-1:0] rr_ptr_q = 0;  // points to next core to serve
+    reg [$clog2(NCORES)-1:0] rr_ptr_d;
+
+    // Selected core
+    reg [$clog2(NCORES)-1:0] sel_core_q = 'd0;
+    reg [$clog2(NCORES)-1:0] sel_core_d;
+    reg [VMEM_ADDRW-1:0] sel_addr_q;
+    reg [VMEM_ADDRW-1:0] sel_addr_d;
+
+    wire [$clog2(NCORES)-1:0] sel_core_arb;
+    wire sel_valid_arb;
+
+    reg being_served [0:NCORES-1];
+
+    reg we_int;
+    reg [VMEM_ADDRW-1:0] addr_int;
+    reg [2:0] wdata_int;
+
+    // Select cores in round-robin fashion
     wire [NCORES-1:0] req_valid_packed;
-
-    wire [$clog2(NCORES)-1:0] sel_core;
-    wire sel_valid;
-
-    wire being_served [0:NCORES-1];
-
-    wire                   we_int;
-    wire [`VMEM_ADDRW-1:0] addr_int;
-    wire             [2:0] wdata_int;
-
-    always @(posedge clk_i) begin : reserve_requests_block
-        for (j = 0; j < NCORES; j = j + 1) begin
-            // Set valid if new request arrives
-            if (!req_valid[j]) begin
-                req_valid[j] <= addr[j] != 32'h0;  // new request
-                req_we[j]    <= we[j];
-                req_addr[j]  <= addr[j];
-                req_wdata[j] <= wdata[j];
-            end else if (being_served[j]) begin
-                // Clear valid when being served
-                req_valid[j] <= 1'b0;
-                req_we[j]    <= 1'b0;
-                req_addr[j]  <= 32'h0;
-                req_wdata[j] <= 32'h0;
-            end
-        end
-    end
-
-    generate
-        for (i = 0; i < NCORES; i = i + 1) begin : gen_output
-            assign stall[i] = (addr[i] != 32'h0) // new request arrives
-                            || (req_valid[i]); // pending request
-        end
-    endgenerate
-
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : pack_req_inputs
-            assign req_valid_packed[i] = req_valid[i];
+            assign req_valid_packed[i] = req_valid_q[i];
         end
     endgenerate
 
     single_issue_arbiter arbiter (
-        .rr_ptr_i    (rr_ptr),
+        .rr_ptr_i    (rr_ptr_q),
         .req_valid_i (req_valid_packed),
-        .valid_o     (sel_valid),
-        .selector_o  (sel_core)
+        .valid_o     (sel_valid_arb),
+        .selector_o  (sel_core_arb)
     );
 
-    // Track which core is currently being served
-    generate
-        for (i = 0; i < NCORES; i = i + 1) begin : gen_being_served
-            assign being_served[i] = sel_valid && sel_core == i;
+    wire select_fire;
+    wire is_access;
+
+    assign select_fire = (state_q == IDLE) && sel_valid_arb;
+    assign is_access = (state_q == ACCESS);
+
+    always @(*) begin
+        state_d    = state_q;
+        sel_core_d = sel_core_q;
+        sel_addr_d = sel_addr_q;
+        rr_ptr_d   = rr_ptr_q;
+        we_int     = 1'b0;
+        addr_int   = {VMEM_ADDRW{1'b0}};
+        wdata_int  = 3'h0;
+
+        for (k = 0; k < NCORES; k = k + 1) begin
+            stall_d[k]      = we[k] || (req_valid_q[k]);
+            req_valid_d[k]  = req_valid_q[k];
+            req_we_d[k]     = req_we_q[k];
+            req_addr_d[k]   = req_addr_q[k];
+            req_wdata_d[k]  = req_wdata_q[k];
+            being_served[k] = (is_access && sel_core_q == k);
+
+            if (!req_valid_q[k]) begin
+                req_valid_d[k]  = we[k];
+                req_we_d[k]     = we[k];
+                req_addr_d[k]   = addr[k];
+                req_wdata_d[k]  = wdata[k];
+            end else if (being_served[k]) begin
+                req_valid_d[k]  = 1'b0;
+                req_we_d[k]     = 1'b0;
+                req_addr_d[k]   = {VMEM_ADDRW{1'b0}};
+                req_wdata_d[k]  = 32'h0;
+            end
         end
-    endgenerate
 
-    assign we_int    = sel_valid && req_we[sel_core];
-    assign addr_int  = sel_valid ? req_addr[sel_core][`VMEM_ADDRW-1:0] : 16'h0;
-    assign wdata_int = sel_valid ? req_wdata[sel_core][2:0] : 3'h0;
+        case (state_q)
+            IDLE: begin
+                if (select_fire) begin
+                    state_d    = ACCESS;
+                    sel_core_d = sel_core_arb;
+                    sel_addr_d = req_addr_q[sel_core_arb];
+                end
+            end
+            ACCESS: begin
+                state_d    = IDLE;
+                we_int     = req_we_q[sel_core_q];
+                addr_int   = sel_addr_q[VMEM_ADDRW-1:0];
+                wdata_int  = req_wdata_q[sel_core_q][2:0];
+            end
+            default: begin
+                state_d    = IDLE;
+            end
+        endcase
 
-    // Update round-robin pointer
+        if (is_access) begin
+            rr_ptr_d = (sel_core_q + 1) % NCORES;
+        end
+    end
+
     always @(posedge clk_i) begin
-        if (sel_valid) begin
-            rr_ptr <= (sel_core + 1) % NCORES;
+        state_q     <= state_d;
+        sel_core_q  <= sel_core_d;
+        sel_addr_q  <= sel_addr_d;
+        rr_ptr_q    <= rr_ptr_d;
+
+        for (j = 0; j < NCORES; j = j + 1) begin
+            stall_q[j]      <= stall_d[j];
+            req_valid_q[j]  <= req_valid_d[j];
+            req_we_q[j]     <= req_we_d[j];
+            req_addr_q[j]   <= req_addr_d[j];
+            req_wdata_q[j]  <= req_wdata_d[j];
         end
     end
 

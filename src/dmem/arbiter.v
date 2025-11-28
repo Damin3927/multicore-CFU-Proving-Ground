@@ -1,9 +1,11 @@
 `resetall
 `default_nettype none
 
+`include "config.vh"
+
 module dual_issue_arbiter #(
     parameter NCORES = `NCORES,
-    parameter ADDR_WIDTH = 32
+    parameter ADDR_WIDTH = `DMEM_ADDRW
 ) (
     input wire    [$clog2(NCORES)-1:0] rr_ptr_i,
     input wire            [NCORES-1:0] req_valid_i,
