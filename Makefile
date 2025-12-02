@@ -36,7 +36,7 @@ build:
 
 prog:
 	mkdir -p build
-	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c
+	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld -Wl,--defsym,_num_cores=$(NCORES) -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c
 	make initf
 
 imem_size =	$(shell grep -oP "\`define\s+IMEM_SIZE\s+\(\K[^)]*" config.vh | bc)
@@ -118,3 +118,5 @@ clean:
 
 reset-hard:
 	rm -rf obj_dir build rvcpu-32im* sample1.txt vivado* .Xil build.tcl main.xdc $(cfu_dir)
+
+include coremark-pro.mk

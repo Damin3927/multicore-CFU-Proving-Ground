@@ -39,6 +39,21 @@ void atomic_add(volatile int *ptr, int val) {
     (void)atomic_fetch_add(ptr, val);
 }
 
+int atomic_exchange(volatile int *ptr, int val) {
+    int old_val, ret;
+    do {
+        asm volatile (
+            "lr.w %[old_val], (%[ptr])\n"
+            "sc.w %[ret], %[val], (%[ptr])\n"
+            : [ret] "=&r" (ret), [old_val] "=&r" (old_val)
+            : [ptr] "r" (ptr), [val] "r" (val)
+            : "memory"
+        );
+    } while (ret != 0);
+
+    return old_val;
+}
+
 void pg_barrier_at(int barrier_id) {
     if (!valid_barrier(barrier_id)) {
         return;

@@ -40,7 +40,7 @@ _start:
     li      x31, 0
     li      t0, 0x40001000
     lw      t1, 0(t0)
-    li      t2, 0x00000400
+    la      t2, _stack_size_per_core
     mul     t1, t1, t2
     la      sp, _fstack
     sub     sp, sp, t1
