@@ -41,13 +41,21 @@ module top;
 // Condition for simulation to end
 //------------------------------------------------------------------------------
     reg cpu_sim_fini = 0;
-    always @(posedge clk) begin
-        if (m0.gen_cpu[CORE0].cpu.dbus_addr_o[31] && m0.gen_cpu[CORE0].cpu.dbus_wvalid_o) begin
-            if (m0.gen_cpu[CORE0].cpu.dbus_wdata == 32'h00020000) cpu_sim_fini <= 1;
-            else begin $write("%c", m0.gen_cpu[CORE0].cpu.dbus_wdata[7:0]); $fflush(); end
-            if (m0.gen_cpu[CORE0].cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
-        end
 
+    genvar i;
+    generate
+        for (i = 0; i < `NCORES; i = i + 1) begin : gen_sim_fini
+            always @(posedge clk) begin
+                if (m0.gen_cpu[i].cpu.dbus_addr_o[31] && m0.gen_cpu[i].cpu.dbus_wvalid_o) begin
+                    if (m0.gen_cpu[i].cpu.dbus_wdata == 32'h00020000) cpu_sim_fini <= 1;
+                    else begin $write("%c", m0.gen_cpu[i].cpu.dbus_wdata[7:0]); $fflush(); end
+                    if (m0.gen_cpu[i].cpu.dbus_addr < 32'h10000000) cpu_sim_fini <= 1;
+                end
+            end
+        end
+    endgenerate
+
+    always @(posedge clk) begin
 `ifdef TIMEOUT_CYCLES
         if (mcycle >= `TIMEOUT_CYCLES) begin
             $write("Simulation timeout!\n");

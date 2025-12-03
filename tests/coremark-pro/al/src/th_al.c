@@ -69,6 +69,7 @@ Please refer to LICENSE.md for the specific license agreement that pertains to t
 #include "util.h"
 #include "st7789.h"
 #include "al_smp.h"
+#include "atomic.h"
 
 /** Define Host specific (POSIX), or target specific global time variables. */
 /* Define: TIMER_RES_DIVIDER
@@ -508,11 +509,20 @@ int al_write_con( const char* tx_buf, size_t byte_count )
  * NOTE: 
  *			To convert this to a string, use vsprintf, NOT sprintf.
  * ---------------------------------------------------------------------------*/
+static volatile int printf_lock = 0;
+
 int		al_printf(const char *fmt, va_list	args)
 {
 	char buf[512];
-	int len = vsprintf(buf, fmt, args);
-	pg_lcd_prints_with_lock(buf);
+	int len;
+
+	while (atomic_exchange((volatile int *)&printf_lock, 1) != 0);
+
+	len = vsprintf(buf, fmt, args);
+	pg_prints(buf);
+
+   printf_lock = 0;
+
 	return len;
 }
 

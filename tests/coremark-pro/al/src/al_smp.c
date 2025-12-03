@@ -231,7 +231,6 @@ void worker_loop(void) {
 		while (slot->state != THREAD_PENDING) { }
 
 		slot->state = THREAD_RUNNING;
-		int rst = 1;
 		slot->result = slot->func(slot->arg);
 		slot->state = THREAD_DONE;
 	}
@@ -253,7 +252,7 @@ int al_thread_create(al_thread_t *thread, void *(*start_routine)(void *), void *
 
 	worker_id = find_idle_worker();
 	if (worker_id < 0) {
-		thread = start_routine(arg);
+		*thread = (al_thread_t)start_routine(arg);
 		return 0;
 	}
 
