@@ -21,6 +21,12 @@
 `define NCORES 4
 `endif
 
+// dmem dbus selection
+// USE_COMB_DBUS: 0 = use multi-cycle round-robin dbus, 1 = use combinational 1-cycle dbus
+`ifndef USE_COMB_DBUS
+`define USE_COMB_DBUS 0
+`endif
+
 // ram
 `define IMEM_SIZE (128*1024) // instruction memory size in byte
 `define DMEM_SIZE (128*1024) // data memory size in byte
