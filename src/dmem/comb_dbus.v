@@ -22,6 +22,8 @@ module comb_dbus_dmem #(
 
     localparam NCORES_A = NCORES / 2;           // Cores assigned to port A
     localparam NCORES_B = NCORES - NCORES_A;    // Cores assigned to port B
+    localparam NCORES_A_W = (NCORES_A > 1) ? $clog2(NCORES_A) : 1;
+    localparam NCORES_B_W = (NCORES_B > 1) ? $clog2(NCORES_B) : 1;
 
     // Unpack input arrays
     wire                  re   [0:NCORES-1];
@@ -49,8 +51,8 @@ module comb_dbus_dmem #(
     endgenerate
 
     // Round-robin pointers for port A and B
-    reg [$clog2(NCORES_A)-1:0] rr_ptr_a_q = 0;
-    reg [$clog2(NCORES_B)-1:0] rr_ptr_b_q = 0;
+    reg [NCORES_A_W-1:0] rr_ptr_a_q = 0;
+    reg [NCORES_B_W-1:0] rr_ptr_b_q = 0;
 
     // Port A: cores 0 to NCORES_A-1
     // Port B: cores NCORES_A to NCORES-1
@@ -71,7 +73,7 @@ module comb_dbus_dmem #(
     endgenerate
 
     // Combinational arbitration for port A (round-robin)
-    reg [$clog2(NCORES_A)-1:0] sel_a;
+    reg [NCORES_A_W-1:0] sel_a;
     reg valid_a;
     always @(*) begin
         sel_a = 0;
@@ -87,7 +89,7 @@ module comb_dbus_dmem #(
     end
 
     // Combinational arbitration for port B (round-robin)
-    reg [$clog2(NCORES_B)-1:0] sel_b;
+    reg [NCORES_B_W-1:0] sel_b;
     reg valid_b;
     always @(*) begin
         sel_b = 0;
@@ -274,8 +276,8 @@ module comb_dbus_dmem #(
     end
 
     // Sequential logic for round-robin pointers and memory read data
-    reg [$clog2(NCORES_A)-1:0] rr_ptr_a_d;
-    reg [$clog2(NCORES_B)-1:0] rr_ptr_b_d;
+    reg [NCORES_A_W-1:0] rr_ptr_a_d;
+    reg [NCORES_B_W-1:0] rr_ptr_b_d;
     reg [$clog2(NCORES)-1:0] ret_core_a_d;
     reg [$clog2(NCORES)-1:0] ret_core_b_d;
     reg ret_valid_a_d;
