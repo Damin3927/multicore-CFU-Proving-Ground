@@ -512,7 +512,8 @@ int		al_printf(const char *fmt, va_list	args)
 {
 	char buf[512];
 	int len = vsprintf(buf, fmt, args);
-	pg_lcd_prints_with_lock(buf);
+   pg_prints(buf);
+
 	return len;
 }
 
