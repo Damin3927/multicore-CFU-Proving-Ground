@@ -259,13 +259,17 @@ module comb_dbus_dmem #(
         for (j = 0; j < NCORES; j = j + 1) begin
             if (ret_valid_a_q && ret_core_a_q == j) begin
                 if (ret_is_sc_a_q) begin
-                    rdata[j] = {31'b0, !sc_success_a_q};  // SC result: 0=success, 1=failure
+                    // SC result per RISC-V spec: write to rd = 0 if success, nonzero if failure
+                    // We use !sc_success because sc_success=1 means success, so we invert to get 0
+                    rdata[j] = {31'b0, !sc_success_a_q};
                 end else begin
                     rdata[j] = rdataa_q;
                 end
             end else if (ret_valid_b_q && ret_core_b_q == j) begin
                 if (ret_is_sc_b_q) begin
-                    rdata[j] = {31'b0, !sc_success_b_q};  // SC result: 0=success, 1=failure
+                    // SC result per RISC-V spec: write to rd = 0 if success, nonzero if failure
+                    // We use !sc_success because sc_success=1 means success, so we invert to get 0
+                    rdata[j] = {31'b0, !sc_success_b_q};
                 end else begin
                     rdata[j] = rdatab_q;
                 end
