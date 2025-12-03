@@ -17,5 +17,7 @@ void pg_lcd_reset();
 void pg_lcd_printd(long long x);
 void pg_lcd_printh(unsigned int x);
 void pg_lcd_prints(const char *str);
+void pg_lcd_prints_with_lock(const char *str);
 void pg_lcd_set_pos(int x, int y);
 void pg_lcd_prints_8x8(const char *str);
+void pg_lcd_prints_8x8_with_lock(const char *str);

@@ -2,6 +2,10 @@
 / Released under the MIT license https://opensource.org/licenses/mit           */
 
 #include "st7789.h"
+#include "atomic.h"
+
+/* Spinlock for exclusive LCD access */
+static volatile int lcd_lock = 0;
 
 /**
  * 8x8 monochrome bitmap fonts for rendering
@@ -248,6 +252,12 @@ void pg_lcd_prints(const char *str) {
     }
 }
 
+void pg_lcd_prints_with_lock(const char *str) {
+    while (atomic_exchange(&lcd_lock, 1) != 0) { }
+    pg_lcd_prints(str);
+    lcd_lock = 0;
+}
+
 void pg_lcd_set_pos(int x, int y) {
     st7789_col = x;
     st7789_row = y;
@@ -269,5 +279,11 @@ void pg_lcd_prints_8x8(const char *str) {
         }
         str++;
     }
+}
+
+void pg_lcd_prints_8x8_with_lock(const char *str) {
+    while (atomic_exchange(&lcd_lock, 1) != 0) { }
+    pg_lcd_prints_8x8(str);
+    lcd_lock = 0;
 }
 
