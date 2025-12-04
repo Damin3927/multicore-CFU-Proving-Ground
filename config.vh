@@ -21,6 +21,9 @@
 `define NCORES 4
 `endif
 
+// dmem dbus selection
+`define USE_COMB_DBUS 1
+
 // ram
 `define IMEM_SIZE (128*1024) // instruction memory size in byte
 `define DMEM_SIZE (128*1024) // data memory size in byte
