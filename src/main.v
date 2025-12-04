@@ -197,6 +197,20 @@ module main #(
         end
     endgenerate
 
+`ifdef USE_COMB_DBUS
+    comb_dbus_dmem comb_dbus_dmem (
+        .clk_i         (clk),                // input  wire
+        .re_packed_i   (dmem_re_packed),     // input  wire [NCORES-1:0]
+        .we_packed_i   (dmem_we_packed),     // input  wire [NCORES-1:0]
+        .addr_packed_i (dmem_addr_packed),   // input  wire [32*NCORES-1:0]
+        .wdata_packed_i(dmem_wdata_packed),  // input  wire [32*NCORES-1:0]
+        .wstrb_packed_i(dmem_wstrb_packed),  // input  wire [4*NCORES-1:0]
+        .is_lr_packed_i(dmem_is_lr_packed),  // input  wire [NCORES-1:0]
+        .is_sc_packed_i(dmem_is_sc_packed),  // input  wire [NCORES-1:0]
+        .rdata_packed_o(dmem_rdata_packed),  // output wire [32*NCORES-1:0]
+        .stall_packed_o(dbus_stall_packed)   // output wire [NCORES-1:0]
+    );
+`else
     dbus_dmem dbus_dmem (
         .clk_i         (clk),                // input  wire
         .re_packed_i   (dmem_re_packed),     // input  wire [NCORES-1:0]
@@ -209,6 +223,7 @@ module main #(
         .rdata_packed_o(dmem_rdata_packed),  // output wire [32*NCORES-1:0]
         .stall_packed_o(dbus_stall_packed)   // output wire [NCORES-1:0]
     );
+`endif
 
     wire [VMEM_ADDRW-1:0] vmem_disp_raddr;
     wire            [2:0] vmem_disp_rdata_t;
