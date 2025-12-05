@@ -90,15 +90,6 @@ module comb_dbus_dmem #(
     reg  [DMEM_ADDRW-1:0] addr_a[0:NCORES_A-1];
     reg  [DMEM_ADDRW-1:0] addr_b[0:NCORES_B-1];
 
-    generate
-        for (i = 0; i < NCORES_A; i = i + 1) begin : gen_req_a
-            // These are now computed in the always block below
-        end
-        for (i = 0; i < NCORES_B; i = i + 1) begin : gen_req_b
-            // These are now computed in the always block below
-        end
-    endgenerate
-
     // Combinational arbitration for port A (round-robin)
     reg [NCORES_A_W-1:0] sel_a;
     reg valid_a;
