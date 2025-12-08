@@ -5,9 +5,6 @@
 #define NCORES 4
 #endif
 
-static volatile int hart_epochs[NCORES];
-static int expected_stage[NCORES][NCORES];
-
 static volatile int barrier_count[PG_MAX_BARRIERS];
 static volatile int barrier_phase[PG_MAX_BARRIERS];
 

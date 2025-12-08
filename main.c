@@ -11,7 +11,6 @@
 #define ITERATIONS 100
 
 volatile int shared_counter = INIT_COUNTER;  // Shared counter
-volatile int test_results[NCORES] = {0}; // Test results from each core
 
 int main()
 {
@@ -22,17 +21,10 @@ int main()
         atomic_add(&shared_counter, 1);
     }
 
-    // Mark this hart as done
-    test_results[hart_id] = 1;
+    pg_barrier();
 
-    // Hart 0 waits for all cores and displays result
     if (hart_id == 0) {
-        // Wait for all cores to finish
-        for (int i = 0; i < NCORES; i++) {
-            while (!test_results[i]) {}
-        }
-
-        // Display result
+        // Display the result
         pg_lcd_set_pos(0, 0);
         pg_lcd_prints("LR/SC Test");
         pg_lcd_set_pos(0, 1);
@@ -48,7 +40,7 @@ int main()
         }
     }
 
-    while (1) {}
+    pg_barrier();
 
     return 0;
 }
