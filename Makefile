@@ -36,7 +36,7 @@ build:
 
 prog:
 	mkdir -p build
-	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld -Wl,--defsym,_num_cores=$(NCORES) -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c
+	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld -Wl,--defsym,_num_cores=$(NCORES) -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c -lm
 	make initf
 
 imem_size =	$(shell grep -oP "\`define\s+IMEM_SIZE\s+\(\K[^)]*" config.vh | bc)

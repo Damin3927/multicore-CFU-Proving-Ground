@@ -46,10 +46,8 @@ module dbus_dmem #(
     wire [3:0]            wstrb[0:NCORES-1];
     wire                  is_lr[0:NCORES-1];
     wire                  is_sc[0:NCORES-1];
-    reg  [31:0]           rdata_q [0:NCORES-1];
+    reg  [31:0]           rdata [0:NCORES-1];
     reg                   stall_q [0:NCORES-1];
-
-    reg  [31:0]           rdata_d [0:NCORES-1];
     reg                   stall_d [0:NCORES-1];
 
     generate
@@ -61,7 +59,7 @@ module dbus_dmem #(
             assign wstrb[i] = wstrb_packed_i[4*(i+1)-1:4*i];
             assign is_lr[i] = is_lr_packed_i[i];
             assign is_sc[i] = is_sc_packed_i[i];
-            assign rdata_packed_o[32*(i+1)-1:32*i] = rdata_q[i];
+            assign rdata_packed_o[32*(i+1)-1:32*i] = rdata[i];
             assign stall_packed_o[i] = stall_q[i];
         end
     endgenerate
@@ -228,10 +226,17 @@ module dbus_dmem #(
         wstrba_int      = 4'h0;
         wstrbb_int      = 4'h0;
 
+        // Calculate being_served for all cores first
         for (k = 0; k < NCORES; k = k + 1) begin
-            stall_d[k]               = (re[k] || we[k]) // new request arrives
-                                       || (req_valid_q[k]); // pending request
-            rdata_d[k]               = (ret_valid_a_q && ret_core_a_q == k) ? (ret_is_sc_a_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdataa_dmem) :
+            being_served[k] = (is_access_a && sel_core_a_global == k)
+                           || (is_access_b && sel_core_b_global == k);
+        end
+
+        for (k = 0; k < NCORES; k = k + 1) begin
+            stall_d[k]               = (re[k] || we[k] // new request arrives
+                                        || req_valid_q[k]) // or any pending request exists
+                                       && !being_served[k]; // but not being served
+            rdata[k]                 = (ret_valid_a_q && ret_core_a_q == k) ? (ret_is_sc_a_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdataa_dmem) :
                                        (ret_valid_b_q && ret_core_b_q == k) ? (ret_is_sc_b_q ? {31'b0, !rsvcheck_sc_success_q[k]} : rdatab_dmem) : 32'h0;
             req_valid_d[k]           = req_valid_q[k];
             req_re_d[k]              = req_re_q[k];
@@ -244,9 +249,6 @@ module dbus_dmem #(
             reservation_valid_d[k]   = reservation_valid_q[k];
             reservation_addr_d[k]    = reservation_addr_q[k];
             rsvcheck_sc_success_d[k] = rsvcheck_sc_success_q[k];
-            being_served[k]          = (is_access_a && sel_core_a_global == k)
-                                       || (is_access_b && sel_core_b_global == k);
-
             if (!req_valid_q[k]) begin
                 req_valid_d[k] = (re[k] || we[k]);
                 req_re_d[k]    = re[k];
@@ -258,13 +260,6 @@ module dbus_dmem #(
                 req_is_sc_d[k] = is_sc[k];
             end else if (being_served[k]) begin
                 req_valid_d[k] = 1'b0;
-                req_re_d[k]    = 1'b0;
-                req_we_d[k]    = 1'b0;
-                req_addr_d[k]  = 32'h0;
-                req_wdata_d[k] = 32'h0;
-                req_wstrb_d[k] = 4'h0;
-                req_is_lr_d[k] = 1'b0;
-                req_is_sc_d[k] = 1'b0;
             end
         end
 
@@ -399,7 +394,6 @@ module dbus_dmem #(
 
         for (j = 0; j < NCORES; j = j + 1) begin
             stall_q[j]             <= stall_d[j];
-            rdata_q[j]             <= rdata_d[j];
             req_valid_q[j]         <= req_valid_d[j];
             req_re_q[j]            <= req_re_d[j];
             req_we_q[j]            <= req_we_d[j];
