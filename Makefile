@@ -16,12 +16,15 @@ TARGET := nexys_a7
 USE_HLS ?= 0
 NCORES ?= 4
 IMEM_SIZE_KB ?= 128
-DMEM_SIZE_KB ?= 128
+DMEM_SIZE_KB ?= 120
+STACK_SIZE_KB ?= 2
 
 IMEM_SIZE ?= $(shell echo $(IMEM_SIZE_KB)*1024 | bc)
 DMEM_SIZE ?= $(shell echo $(DMEM_SIZE_KB)*1024 | bc)
+STACK_SIZE ?= $(shell echo $(STACK_SIZE_KB)*1024 | bc)
 IMEM_SIZE_HEX := $(shell printf "0x%X" $(IMEM_SIZE))
 DMEM_SIZE_HEX := $(shell printf "0x%X" $(DMEM_SIZE))
+STACK_SIZE_HEX := $(shell printf "0x%X" $(STACK_SIZE))
 
 .PHONY: build prog run clean
 all: prog build
@@ -38,7 +41,7 @@ srcs += $(wildcard $(src_dir)/vmem/*.v)
 srcs += $(wildcard $(cfu_dir)/*.v)
 
 build:
-	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(srcs)
+	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) -DSTACK_SIZE=$(STACK_SIZE) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(srcs)
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
@@ -47,6 +50,7 @@ prog:
 		-Wl,--defsym,_num_cores=$(NCORES) \
 		-Wl,--defsym,IMEM_SIZE=$(IMEM_SIZE_HEX) \
 		-Wl,--defsym,DMEM_SIZE=$(DMEM_SIZE_HEX) \
+		-Wl,--defsym,_stack_size=$(STACK_SIZE_HEX) \
 		-DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c -lm
 	make initf
 
@@ -94,7 +98,7 @@ bit:
 		echo "Plese run 'make init' first."; \
 		exit 1; \
 	fi
-	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) --imem_size $(IMEM_SIZE) --dmem_size $(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),--hls)
+	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) --imem_size $(IMEM_SIZE) --dmem_size $(DMEM_SIZE) --stack_size $(STACK_SIZE) $(if $(filter 1,$(USE_HLS)),--hls)
 	cp vivado/main.runs/impl_1/main.bit build/.
 	@if [ -f vivado/main.runs/impl_i/main.ltx ]; then \
 		cp -f vivado/main.runs/impl_i/main.ltx build/.; \
