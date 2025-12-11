@@ -18,8 +18,10 @@ if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} $config_content -> freq]} {
     exit 1
 }
 
-# Default NCORES value
+# Default values
 set ncores 4
+set imem_size ""
+set dmem_size ""
 
 create_project -force $proj_name $top_dir/vivado -part $part_name
 set_property strategy Flow_PerfOptimized_high [get_runs synth_1]
@@ -36,6 +38,24 @@ for {set i 0} {$i < $argc} {incr i} {
             puts "Error: --ncores requires a value"
             exit 1
         }
+    } elseif {[lindex $argv $i] eq "--imem_size"} {
+        incr i
+        if {$i < $argc} {
+            set imem_size [lindex $argv $i]
+            puts "IMEM_SIZE set to: $imem_size"
+        } else {
+            puts "Error: --imem_size requires a value"
+            exit 1
+        }
+    } elseif {[lindex $argv $i] eq "--dmem_size"} {
+        incr i
+        if {$i < $argc} {
+            set dmem_size [lindex $argv $i]
+            puts "DMEM_SIZE set to: $dmem_size"
+        } else {
+            puts "Error: --dmem_size requires a value"
+            exit 1
+        }
     } elseif {[lindex $argv $i] eq "--hls"} {
         puts "HLS mode enabled. Adding HLS source files."
         set src_files [concat $src_files [glob -nocomplain $top_dir/cfu/*.v]]
@@ -46,8 +66,21 @@ for {set i 0} {$i < $argc} {incr i} {
     }
 }
 
-# Set NCORES define
-set_property verilog_define [list "NCORES=$ncores"] [get_filesets sources_1]
+# Set defines
+set defines [list "NCORES=$ncores"]
+if {$imem_size ne ""} {
+    lappend defines "IMEM_SIZE=$imem_size"
+}
+if {$dmem_size ne ""} {
+    lappend defines "DMEM_SIZE=$dmem_size"
+}
+if {[lsearch $defines "USE_HLS"] < 0 && [get_property verilog_define [get_filesets sources_1]] ne ""} {
+    # keep any HLS define already set in the HLS branch
+    foreach d [get_property verilog_define [get_filesets sources_1]] {
+        if {[lsearch $defines $d] < 0} {lappend defines $d}
+    }
+}
+set_property verilog_define $defines [get_filesets sources_1]
 
 add_files -force -scan_for_includes $src_files
 add_files -fileset constrs_1 $top_dir/main.xdc

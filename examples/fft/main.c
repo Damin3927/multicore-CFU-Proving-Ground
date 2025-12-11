@@ -24,23 +24,38 @@ void fft(float *f, int hart_id, int ncores)
 {
     int block_offset = 2;
     int butterflies_offset = 1;
-    int cnt_stages, cnt_blocks, cnt_butterflies, cnt_twiddle;
-    int idx_upper, idx_lower, idx_blocks;
 
-    for (cnt_stages = 0; cnt_stages < FFT_STAGES; ++cnt_stages) {
+    for (int cnt_stages = 0; cnt_stages < FFT_STAGES; ++cnt_stages) {
         int num_blocks = FFT_POINT_2 >> cnt_stages;
 
-        int blocks_per_core = (num_blocks + ncores - 1) / ncores;
-        int block_start = hart_id * blocks_per_core;
-        int block_end = block_start + blocks_per_core;
-        if (block_end > num_blocks) block_end = num_blocks;
+        int blocks_per_core = num_blocks / ncores;
+        int divide_by_block = num_blocks >= 4;
+        int block_start, block_end;
+        if (divide_by_block) {
+            block_start = hart_id * blocks_per_core;
+            block_end = block_start + blocks_per_core;
+        } else {
+            block_start = 0;
+            block_end = num_blocks;
+        }
 
-        for (cnt_blocks = block_start; cnt_blocks < block_end; ++cnt_blocks) {
-            cnt_twiddle = 0;
-            idx_blocks = cnt_blocks * block_offset;
-            for (cnt_butterflies = 0; cnt_butterflies < (1 << cnt_stages); ++cnt_butterflies) {
-                idx_upper = idx_blocks + cnt_butterflies;
-                idx_lower = idx_upper + butterflies_offset;
+        for (int cnt_blocks = block_start; cnt_blocks < block_end; ++cnt_blocks) {
+            int cnt_twiddle = 0;
+            int idx_blocks = cnt_blocks * block_offset;
+
+            int cnt_butterflies_start, cnt_butterflies_end;
+            if (divide_by_block) {
+                cnt_butterflies_start = 0;
+                cnt_butterflies_end = (1 << cnt_stages);
+            } else {
+                int butterflies_per_core = (1 << cnt_stages) / ncores;
+                cnt_butterflies_start = hart_id * butterflies_per_core;
+                cnt_butterflies_end = cnt_butterflies_start + butterflies_per_core;
+            }
+
+            for (int cnt_butterflies = cnt_butterflies_start; cnt_butterflies < cnt_butterflies_end; ++cnt_butterflies) {
+                int idx_upper = idx_blocks + cnt_butterflies;
+                int idx_lower = idx_upper + butterflies_offset;
 
                 float temp_var1 = f[(idx_lower<<1)]   * W_N[(cnt_twiddle<<1)]  ;
                 float temp_var2 = f[(idx_lower<<1)+1] * W_N[(cnt_twiddle<<1)+1];
@@ -73,7 +88,11 @@ int main ()
     int hart_id = pg_hart_id();
 
     float t;
-    for (int i = 0; i < FFT_POINT; i++) {
+
+    int i_start = (FFT_POINT / NCORES) * hart_id;
+    int i_end = i_start + (FFT_POINT / NCORES);
+
+    for (int i = i_start; i < i_end; i++) {
         W_N[(i<<1)]   = cosf(-2.0 * M_PI * i / FFT_POINT);
         W_N[(i<<1)+1] = sinf(-2.0 * M_PI * i / FFT_POINT);
 
@@ -82,9 +101,11 @@ int main ()
         f[(i<<1)+1] = 0;
     }
 
+    pg_barrier();
+
     int j;
     float tmp;
-    for (int i = 0; i < FFT_POINT; i++) {
+    for (int i = i_start; i < i_end; i++) {
         j = ((i & 0xFF00) >> 8) | ((i & 0x00FF) << 8);
         j = ((j & 0xF0F0) >> 4) | ((j & 0x0F0F) << 4);
         j = ((j & 0xCCCC) >> 2) | ((j & 0x3333) << 2);
@@ -112,8 +133,8 @@ int main ()
         pg_perf_disable();
         unsigned long long end = pg_perf_cycle();
         unsigned long long cycles = end - start;
-        pg_lcd_prints("FFT cycles:\n");
-        pg_lcd_printd(cycles);
+        pg_prints("FFT cycles:\n");
+        pg_printd(cycles);
     }
 
     pg_barrier();
