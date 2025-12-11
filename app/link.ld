@@ -5,12 +5,13 @@ OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
 _stack_size_per_core = 2K;
-/* _num_cores is defined via -Wl,--defsym,_num_cores=N from Makefile */
 _total_stack_size = _stack_size_per_core * _num_cores;
+PROVIDE(IMEM_SIZE = 0x00020000);
+PROVIDE(DMEM_SIZE = 0x00020000);
 
 MEMORY {
-    imem : ORIGIN = 0x00000000, LENGTH = 0x00020000
-    dmem : ORIGIN = 0x10000000, LENGTH = 0x00020000
+    imem : ORIGIN = 0x00000000, LENGTH = IMEM_SIZE
+    dmem : ORIGIN = 0x10000000, LENGTH = DMEM_SIZE
 }
 
 SECTIONS

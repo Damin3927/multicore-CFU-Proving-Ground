@@ -15,6 +15,13 @@ TARGET := nexys_a7
 
 USE_HLS ?= 0
 NCORES ?= 4
+IMEM_SIZE_KB ?= 128
+DMEM_SIZE_KB ?= 128
+
+IMEM_SIZE ?= $(shell echo $(IMEM_SIZE_KB)*1024 | bc)
+DMEM_SIZE ?= $(shell echo $(DMEM_SIZE_KB)*1024 | bc)
+IMEM_SIZE_HEX := $(shell printf "0x%X" $(IMEM_SIZE))
+DMEM_SIZE_HEX := $(shell printf "0x%X" $(DMEM_SIZE))
 
 .PHONY: build prog run clean
 all: prog build
@@ -31,16 +38,18 @@ srcs += $(wildcard $(src_dir)/vmem/*.v)
 srcs += $(wildcard $(cfu_dir)/*.v)
 
 build:
-	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(srcs)
+	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(srcs)
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
 	mkdir -p build
-	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld -Wl,--defsym,_num_cores=$(NCORES) -DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c -lm
+	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld \
+		-Wl,--defsym,_num_cores=$(NCORES) \
+		-Wl,--defsym,IMEM_SIZE=$(IMEM_SIZE_HEX) \
+		-Wl,--defsym,DMEM_SIZE=$(DMEM_SIZE_HEX) \
+		-DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c -lm
 	make initf
 
-imem_size =	$(shell grep -oP "\`define\s+IMEM_SIZE\s+\(\K[^)]*" config.vh | bc)
-dmem_size =	$(shell grep -oP "\`define\s+DMEM_SIZE\s+\(\K[^)]*" config.vh | bc)
 initf:
 	$(OBJDUMP) -D build/main.elf > build/main.dump
 	$(OBJCOPY) -O binary --only-section=.text build/main.elf build/memi.bin.tmp; \
@@ -50,9 +59,9 @@ initf:
 						 build/main.elf build/memd.bin.tmp; \
 	for suf in i d; do \
 		if [ "$$suf" = "i" ]; then \
-			mem_size=$(imem_size); \
+			mem_size=$(IMEM_SIZE); \
 		else \
-			mem_size=$(dmem_size); \
+			mem_size=$(DMEM_SIZE); \
 		fi; \
 		dd if=build/mem$$suf.bin.tmp of=build/mem$$suf.bin conv=sync bs=$$mem_size; \
 		rm -f build/mem$$suf.bin.tmp; \
@@ -85,7 +94,7 @@ bit:
 		echo "Plese run 'make init' first."; \
 		exit 1; \
 	fi
-	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) $(if $(filter 1,$(USE_HLS)),--hls)
+	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) --imem_size $(IMEM_SIZE) --dmem_size $(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),--hls)
 	cp vivado/main.runs/impl_1/main.bit build/.
 	@if [ -f vivado/main.runs/impl_i/main.ltx ]; then \
 		cp -f vivado/main.runs/impl_i/main.ltx build/.; \

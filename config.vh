@@ -25,8 +25,12 @@
 // `define USE_COMB_DBUS 1
 
 // ram
+`ifndef IMEM_SIZE
 `define IMEM_SIZE (128*1024) // instruction memory size in byte
+`endif
+`ifndef DMEM_SIZE
 `define DMEM_SIZE (128*1024) // data memory size in byte
+`endif
 `define VMEM_SIZE (64*1024) // video memory size in byte
 
 `define IMEM_ENTRIES (`IMEM_SIZE/4)
