@@ -22,6 +22,7 @@ if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} $config_content -> freq]} {
 set ncores 4
 set imem_size ""
 set dmem_size ""
+set stack_size ""
 
 create_project -force $proj_name $top_dir/vivado -part $part_name
 set_property strategy Flow_PerfOptimized_high [get_runs synth_1]
@@ -56,6 +57,15 @@ for {set i 0} {$i < $argc} {incr i} {
             puts "Error: --dmem_size requires a value"
             exit 1
         }
+    } elseif {[lindex $argv $i] eq "--stack_size"} {
+        incr i
+        if {$i < $argc} {
+            set stack_size [lindex $argv $i]
+            puts "STACK_SIZE set to: $stack_size"
+        } else {
+            puts "Error: --stack_size requires a value"
+            exit 1
+        }
     } elseif {[lindex $argv $i] eq "--hls"} {
         puts "HLS mode enabled. Adding HLS source files."
         set src_files [concat $src_files [glob -nocomplain $top_dir/cfu/*.v]]
@@ -73,6 +83,9 @@ if {$imem_size ne ""} {
 }
 if {$dmem_size ne ""} {
     lappend defines "DMEM_SIZE=$dmem_size"
+}
+if {$stack_size ne ""} {
+    lappend defines "STACK_SIZE=$stack_size"
 }
 if {[lsearch $defines "USE_HLS"] < 0 && [get_property verilog_define [get_filesets sources_1]] ne ""} {
     foreach d [get_property verilog_define [get_filesets sources_1]] {

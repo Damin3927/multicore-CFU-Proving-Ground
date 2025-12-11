@@ -14,6 +14,8 @@ module main #(
     parameter DMEM_ADDRW = `DMEM_ADDRW,
     parameter VMEM_ADDRW = `VMEM_ADDRW,
     parameter VMEM_WDATAW = 3,
+    parameter STACK_SIZE = `STACK_SIZE,
+    parameter STACK_ADDRW = `STACK_ADDRW,
     parameter NCORES     = `NCORES
 ) (
     input  wire clk_i,
@@ -64,6 +66,13 @@ module main #(
     wire [VMEM_ADDRW-1:0]  vmem_addr  [0:NCORES-1];
     wire [VMEM_WDATAW-1:0] vmem_wdata [0:NCORES-1];
 
+    wire                   stack_we    [0:NCORES-1];
+    wire                   stack_re    [0:NCORES-1];
+    wire [STACK_ADDRW-1:0] stack_addr  [0:NCORES-1];
+    wire            [31:0] stack_wdata [0:NCORES-1];
+    wire             [3:0] stack_wstrb [0:NCORES-1];
+    wire            [31:0] stack_rdata [0:NCORES-1];
+
     // Pack arrays for dbus_dmem module
     wire [NCORES-1:0] dmem_re_packed;
     wire [NCORES-1:0] dmem_we_packed;
@@ -107,19 +116,22 @@ module main #(
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : gen_cpu
             // Memory map address decoding:
-            // 0x10000000 - 0x10003FFF (bit[28]=1, bit[29]=0, bit[30]=0): Data Memory
+            // 0x10000000 - 0x17FFFFFF (bit[28]=1, bit[29]=0, bit[27]=0): Shared Data Memory
+            // 0x18000000 - 0x1FFFFFFF (bit[28]=1, bit[29]=0, bit[27]=1): Per-core Stack Memory
             // 0x20000000 - 0x2000FFFF (bit[29]=1, bit[30]=0): Video Memory
             // 0x40000000 - 0x40000FFF (bit[30]=1, bit[12]=0): Performance Counter
             // 0x40001000 - 0x40001FFF (bit[30]=1, bit[12]=1): Hart Index
-            wire in_dmem_range = dbus_addr[i][28];  // 0x1xxxxxxx
-            wire in_vmem_range = dbus_addr[i][29];  // 0x2xxxxxxx
-            wire in_perf_range = dbus_addr[i][30] && !dbus_addr[i][12];  // 0x40000xxx
-            wire in_hart_range = dbus_addr[i][30] && dbus_addr[i][12];   // 0x40001xxx
+            wire in_stack_range = dbus_addr[i][28] && dbus_addr[i][27];   // 0x18xxxxxx
+            wire in_dmem_range  = dbus_addr[i][28] && !dbus_addr[i][27];  // 0x10xxxxxx - 0x17xxxxxx
+            wire in_vmem_range  = dbus_addr[i][29];  // 0x2xxxxxxx
+            wire in_perf_range  = dbus_addr[i][30] && !dbus_addr[i][12];  // 0x40000xxx
+            wire in_hart_range  = dbus_addr[i][30] && dbus_addr[i][12];   // 0x40001xxx
 
             reg in_dmem_range_reg;
             reg in_vmem_range_reg;
             reg in_perf_range_reg;
             reg in_hart_range_reg;
+            reg in_stack_range_reg;
 
             always @(posedge clk) begin
                 if (!dmem_stall[i]) begin
@@ -129,10 +141,12 @@ module main #(
                 in_vmem_range_reg <= in_vmem_range;
                 in_perf_range_reg <= in_perf_range;
                 in_hart_range_reg <= in_hart_range;
+                in_stack_range_reg <= in_stack_range;
             end
 
             wire [31:0] perf_rdata;
-            assign dbus_rdata[i] = in_dmem_range_reg ? dmem_rdata[i] :
+            assign dbus_rdata[i] = in_stack_range_reg ? stack_rdata[i] :
+                                   in_dmem_range_reg ? dmem_rdata[i] :
                                    in_vmem_range_reg ? 0 :  // vmem is write-only for CPUs
                                    in_perf_range_reg ? perf_rdata :
                                    in_hart_range_reg ? hart_rdata[i] : 0;
@@ -163,9 +177,26 @@ module main #(
             assign dmem_addr[i]  = dbus_addr[i][DMEM_ADDRW+1:2];
             assign dmem_wdata[i] = dbus_wdata[i];
             assign dmem_wstrb[i] = dbus_wstrb[i];
+
             assign vmem_we[i]    = in_vmem_range & dbus_we[i];
             assign vmem_addr[i]  = dbus_addr[i][VMEM_ADDRW-1:0];
             assign vmem_wdata[i] = dbus_wdata[i][VMEM_WDATAW-1:0];
+
+            assign stack_re[i]   = in_stack_range & !dbus_we[i];
+            assign stack_we[i]   = in_stack_range & dbus_we[i];
+            assign stack_addr[i] = dbus_addr[i][STACK_ADDRW+1:2];
+            assign stack_wdata[i]= dbus_wdata[i];
+            assign stack_wstrb[i]= dbus_wstrb[i];
+
+            stack_dmem stack_ram (
+                .clk_i   (clk),            // input  wire
+                .re_i    (stack_re[i]),    // input  wire
+                .we_i    (stack_we[i]),    // input  wire
+                .addr_i  (stack_addr[i]),  // input  wire [STACK_ADDRW-1:0]
+                .wdata_i (stack_wdata[i]), // input  wire [31:0]
+                .wstrb_i (stack_wstrb[i]), // input  wire [3:0]
+                .rdata_o (stack_rdata[i])  // output wire [31:0]
+            );
 
             wire perf_we          = in_perf_range & dbus_we[i];
             wire [7:0] perf_addr  = dbus_addr[i][7:0];
