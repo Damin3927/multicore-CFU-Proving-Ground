@@ -1,4 +1,3 @@
-/* Test program for RV32A LR/SC instructions */
 #include "atomic.h"
 #include "st7789.h"
 #include "util.h"

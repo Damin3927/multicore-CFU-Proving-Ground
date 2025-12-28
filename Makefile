@@ -1,53 +1,26 @@
 # CFU Proving Ground since 2025-02    Copyright(c) 2025 Archlab. Science Tokyo
 # Released under the MIT license https://opensource.org/licenses/mit
 
-GCC     := /tools/cad/riscv/rv32ima/bin/riscv32-unknown-elf-gcc
-GPP     := /tools/cad/riscv/rv32ima/bin/riscv32-unknown-elf-g++
-OBJCOPY := /tools/cad/riscv/rv32ima/bin/riscv32-unknown-elf-objcopy
-OBJDUMP := /tools/cad/riscv/rv32ima/bin/riscv32-unknown-elf-objdump
-VIVADO  := /tools/Xilinx/Vivado/2024.1/bin/vivado
-VPP     := /tools/Xilinx/Vitis/2024.1/bin/v++
-RTLSIM  := /tools/cad/bin/verilator
+include config.mk
 
 #TARGET := arty_a7
 #TARGET := cmod_a7
 TARGET := nexys_a7
 
-USE_HLS ?= 0
-NCORES ?= 4
-IMEM_SIZE_KB ?= 128
-DMEM_SIZE_KB ?= 128
-
-IMEM_SIZE ?= $(shell echo $(IMEM_SIZE_KB)*1024 | bc)
-DMEM_SIZE ?= $(shell echo $(DMEM_SIZE_KB)*1024 | bc)
-IMEM_SIZE_HEX := $(shell printf "0x%X" $(IMEM_SIZE))
-DMEM_SIZE_HEX := $(shell printf "0x%X" $(DMEM_SIZE))
-
 .PHONY: build prog run clean
 all: prog build
 
-src_dir := src
-cfu_dir := cfu
-srcs += $(wildcard *.v)
-srcs += $(wildcard *.vh)
-srcs += $(wildcard $(src_dir)/*.v)
-srcs += $(wildcard $(src_dir)/cpu/*.v)
-srcs += $(wildcard $(src_dir)/dmem/*.v)
-srcs += $(wildcard $(src_dir)/imem/*.v)
-srcs += $(wildcard $(src_dir)/vmem/*.v)
-srcs += $(wildcard $(cfu_dir)/*.v)
-
 build:
-	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(srcs)
+	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(verilog_srcs)
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
 	mkdir -p build
-	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -Iapp -Tapp/link.ld \
+	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles $(c_includes) -Tapp/link.ld \
 		-Wl,--defsym,_num_cores=$(NCORES) \
 		-Wl,--defsym,IMEM_SIZE=$(IMEM_SIZE_HEX) \
 		-Wl,--defsym,DMEM_SIZE=$(DMEM_SIZE_HEX) \
-		-DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s app/*.c *.c -lm
+		-DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s $(c_srcs) -lm
 	make initf
 
 initf:
@@ -123,9 +96,7 @@ init:
 	cp constr/build_$(TARGET).tcl build.tcl
 
 clean:
-	rm -rf obj_dir rvcpu-32im* vivado* .Xil $(cfu_dir)
+	rm -rf obj_dir rvcpu-32im* vivado* .Xil $(cfu_dir) app/*.o
 
-reset-hard:
-	rm -rf obj_dir build rvcpu-32im* sample1.txt vivado* .Xil build.tcl main.xdc $(cfu_dir)
-
-include coremark-pro.mk
+reset-hard: clean
+	rm -rf build build.tcl main.xdc

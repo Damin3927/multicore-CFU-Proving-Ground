@@ -40,6 +40,7 @@ module main #(
     wire                       rst = !rst_ni || !locked;
     wire [IBUS_ADDR_WIDTH-1:0] imem_raddr [0:NCORES-1];
     wire [IBUS_DATA_WIDTH-1:0] imem_rdata [0:NCORES-1];
+
     wire                       dbus_we   [0:NCORES-1];
     wire [DBUS_ADDR_WIDTH-1:0] dbus_addr [0:NCORES-1];
     wire [DBUS_DATA_WIDTH-1:0] dbus_wdata[0:NCORES-1];
@@ -48,21 +49,21 @@ module main #(
     wire                       dbus_is_sc[0:NCORES-1];
     wire [DBUS_DATA_WIDTH-1:0] dbus_rdata[0:NCORES-1];
     wire                       dbus_stall[0:NCORES-1];
-    wire                       dmem_stall[0:NCORES-1];
-    wire                       vmem_stall[0:NCORES-1];
 
     wire [31:0] hart_rdata[0:NCORES-1];
 
-    wire                       dmem_we    [0:NCORES-1];
-    wire                       dmem_re    [0:NCORES-1];
-    wire [DMEM_ADDRW-1:0]      dmem_addr  [0:NCORES-1];
-    wire                [31:0] dmem_wdata [0:NCORES-1];
-    wire                [3:0]  dmem_wstrb [0:NCORES-1];
-    wire                [31:0] dmem_rdata [0:NCORES-1];
+    wire                  dmem_we    [0:NCORES-1];
+    wire                  dmem_re    [0:NCORES-1];
+    wire [DMEM_ADDRW-1:0] dmem_addr  [0:NCORES-1];
+    wire           [31:0] dmem_wdata [0:NCORES-1];
+    wire           [3:0]  dmem_wstrb [0:NCORES-1];
+    wire           [31:0] dmem_rdata [0:NCORES-1];
+    wire                  dmem_stall [0:NCORES-1];
 
     wire                   vmem_we    [0:NCORES-1];
     wire [VMEM_ADDRW-1:0]  vmem_addr  [0:NCORES-1];
     wire [VMEM_WDATAW-1:0] vmem_wdata [0:NCORES-1];
+    wire                   vmem_stall[0:NCORES-1];
 
     // Pack arrays for dbus_dmem module
     wire [NCORES-1:0] dmem_re_packed;
@@ -126,7 +127,7 @@ module main #(
                     in_dmem_range_reg <= in_dmem_range;
                 end
 
-                in_vmem_range_reg <= in_vmem_range;
+                in_vmem_range_reg <= in_vmem_range; // vmem is write-only, thus no need to stall
                 in_perf_range_reg <= in_perf_range;
                 in_hart_range_reg <= in_hart_range;
             end
