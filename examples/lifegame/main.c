@@ -232,13 +232,7 @@ int main_master(int start_x, int end_x) {
     pg_lcd_set_pos(0, 0);
     pg_lcd_prints_8x8("---------- finished ----------\n");
     unsigned long long cycle = pg_perf_cycle();
-    unsigned long long insns = pg_perf_insns();
-    int insnpk = insns * 1000 / cycle;
     sprintf(buf, "cycle      : %15lld  \n", cycle);
-    pg_lcd_prints_8x8(buf);
-    sprintf(buf, "insn       : %15lld  \n", insns);
-    pg_lcd_prints_8x8(buf);
-    sprintf(buf, "insn/Kcycle: %15d  \n", insnpk);
     pg_lcd_prints_8x8(buf);
     pg_lcd_prints_8x8("------------------------------\n");
 

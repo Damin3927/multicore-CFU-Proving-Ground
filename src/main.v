@@ -138,8 +138,6 @@ module main #(
                                    in_perf_range_reg ? perf_rdata :
                                    in_hart_range_reg ? hart_rdata[i] : 0;
 
-            wire insnret;
-
             cpu cpu (
                 .clk_i        (clk),            // input  wire
                 .rst_i        (rst),            // input  wire
@@ -153,7 +151,6 @@ module main #(
                 .dbus_is_lr_o (dbus_is_lr[i]),  // output wire
                 .dbus_is_sc_o (dbus_is_sc[i]),  // output wire
                 .dbus_rdata_i (dbus_rdata[i]),  // input  wire [DBUS_DATA_WIDTH-1:0]
-                .insnret      (insnret),        // output wire
                 .hart_index   (i)               // input  wire
             );
 
@@ -169,15 +166,13 @@ module main #(
             assign vmem_wdata[i] = dbus_wdata[i][VMEM_WDATAW-1:0];
 
             wire perf_we          = in_perf_range & dbus_we[i];
-            wire [7:0] perf_addr  = dbus_addr[i][7:0];
+            wire [3:0] perf_addr  = dbus_addr[i][3:0];
             wire [2:0] perf_wdata = dbus_wdata[i][2:0];
             perf_cntr perf (
                 .clk_i   (clk),         // input  wire
-                .rst_i   (rst),         // input  wire
-                .addr_i  (perf_addr),   // input  wire [7:0]
+                .addr_i  (perf_addr),   // input  wire [3:0]
                 .wdata_i (perf_wdata),  // input  wire [2:0]
                 .w_en_i  (perf_we),     // input  wire
-                .insnret (insnret),     // input  wire
                 .rdata_o (perf_rdata)   // output wire [31:0]
             );
         end

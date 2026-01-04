@@ -18,9 +18,3 @@ void pg_perf_enable(void) {
 void pg_perf_disable(void) {
     *(volatile char *)0x40000000 = 2;
 }
-
-unsigned long long pg_perf_insns(void) {
-    unsigned int insn  = *(volatile unsigned int *)0x40000010;
-    unsigned int insnh = *(volatile unsigned int *)0x40000014;
-    return ((unsigned long long)insnh << 32) | insn;
-}
