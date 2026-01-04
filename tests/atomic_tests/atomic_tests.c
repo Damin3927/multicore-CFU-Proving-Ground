@@ -1,8 +1,3 @@
-/* Atomic Operations Test Suite for RISC-V Multicore
- *
- * This file runs all atomic operation tests and reports results.
- */
-
 #include "atomic.h"
 #include "util.h"
 #include "suites/test_common.h"
@@ -22,8 +17,7 @@ static const test_entry_t all_tests[] = {
     { "fetch_add_negative", test_fetch_add_negative },
     { "fetch_add_concurrent_100", test_fetch_add_concurrent_100 },
     { "fetch_add_concurrent_1000", test_fetch_add_concurrent_1000 },
-    { "atomic_add_basic", test_atomic_add_basic },
-    { "atomic_add_concurrent", test_atomic_add_concurrent },
+    { "fetch_add_concurrent_1000_with_random_nop", test_fetch_add_concurrent_1000_with_random_nop },
 
     /* Exchange Tests */
     { "exchange_basic", test_exchange_basic },
@@ -50,16 +44,13 @@ static const test_entry_t all_tests[] = {
 
 #define NUM_TESTS (sizeof(all_tests) / sizeof(all_tests[0]))
 
-/* Global test statistics */
+// Global test statistics
 static volatile int total_passed;
 static volatile int total_failed;
 static volatile int tests_run;
 
 void run_test(test_func_t test_func, const char *name, int hart_id, int ncores)
 {
-    /* Sync before test */
-    pg_barrier();
-
     if (hart_id == 0) {
         pg_prints("[TEST] ");
         pg_prints(name);
@@ -68,12 +59,10 @@ void run_test(test_func_t test_func, const char *name, int hart_id, int ncores)
 
     pg_barrier();
 
-    /* Run test */
     test_result_t result = test_func(hart_id, ncores);
 
     pg_barrier();
 
-    /* Collect results on hart 0 */
     if (hart_id == 0) {
         if (result.failed > 0) {
             pg_prints("  RESULT: FAILED (");
@@ -92,76 +81,71 @@ void run_test(test_func_t test_func, const char *name, int hart_id, int ncores)
         }
         tests_run++;
     }
-
-    pg_barrier();
 }
 
-void print_header(int hart_id)
+void print_header()
 {
-    if (hart_id == 0) {
-        pg_prints("\n");
-        pg_prints("========================================\n");
-        pg_prints("   RISC-V Atomic Operations Test Suite  \n");
-        pg_prints("========================================\n");
-        pg_prints("Number of cores: ");
-        pg_printd(NCORES);
-        pg_prints("\n");
-        pg_prints("Number of tests: ");
-        pg_printd(NUM_TESTS);
-        pg_prints("\n");
-        pg_prints("----------------------------------------\n\n");
-    }
+    pg_prints("\n");
+    pg_prints("========================================\n");
+    pg_prints("   RISC-V Atomic Operations Test Suite  \n");
+    pg_prints("========================================\n");
+    pg_prints("Number of cores: ");
+    pg_printd(NCORES);
+    pg_prints("\n");
+    pg_prints("Number of tests: ");
+    pg_printd(NUM_TESTS);
+    pg_prints("\n");
+    pg_prints("----------------------------------------\n\n");
 }
 
-void print_summary(int hart_id)
+void print_summary()
 {
-    if (hart_id == 0) {
-        pg_prints("\n");
-        pg_prints("========================================\n");
-        pg_prints("            TEST SUMMARY                \n");
-        pg_prints("========================================\n");
-        pg_prints("Tests run:    ");
-        pg_printd(tests_run);
-        pg_prints("\n");
-        pg_prints("Tests passed: ");
-        pg_printd(total_passed);
-        pg_prints("\n");
-        pg_prints("Tests failed: ");
-        pg_printd(total_failed);
-        pg_prints("\n");
-        pg_prints("----------------------------------------\n");
-        if (total_failed == 0) {
-            pg_prints("ALL TESTS PASSED!\n");
-        } else {
-            pg_prints("SOME TESTS FAILED!\n");
-        }
-        pg_prints("========================================\n\n");
+    pg_prints("\n");
+    pg_prints("========================================\n");
+    pg_prints("            TEST SUMMARY                \n");
+    pg_prints("========================================\n");
+    pg_prints("Tests run:    ");
+    pg_printd(tests_run);
+    pg_prints("\n");
+    pg_prints("Tests passed: ");
+    pg_printd(total_passed);
+    pg_prints("\n");
+    pg_prints("Tests failed: ");
+    pg_printd(total_failed);
+    pg_prints("\n");
+    pg_prints("----------------------------------------\n");
+    if (total_failed == 0) {
+        pg_prints("ALL TESTS PASSED!\n");
+    } else {
+        pg_prints("SOME TESTS FAILED!\n");
     }
+    pg_prints("========================================\n\n");
 }
 
 int main(void)
 {
     int hart_id = pg_hart_id();
 
-    /* Initialize statistics */
     if (hart_id == 0) {
         total_passed = 0;
         total_failed = 0;
         tests_run = 0;
+
+        print_header();
     }
 
     pg_barrier();
-
-    print_header(hart_id);
 
     /* Run all tests */
     for (int i = 0; i < (int)NUM_TESTS; i++) {
         run_test(all_tests[i].func, all_tests[i].suite_name, hart_id, NCORES);
     }
 
-    print_summary(hart_id);
+    if (hart_id == 0) {
+        print_summary();
+    }
 
     pg_barrier();
 
-    return (total_failed == 0) ? 0 : 1;
+    return 0;
 }

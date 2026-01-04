@@ -29,7 +29,7 @@ test_result_t test_mixed_atomic_ops(int hart_id, int ncores)
         if (i % 3 == 0) {
             atomic_fetch_add(&mixed_counter1, 1);
         } else if (i % 3 == 1) {
-            atomic_add(&mixed_counter2, -1);
+            atomic_fetch_add(&mixed_counter2, -1);
         } else {
             /* Exchange to toggle flag */
             atomic_exchange(&mixed_flag, hart_id);

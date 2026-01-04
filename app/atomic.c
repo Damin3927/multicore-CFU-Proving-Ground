@@ -34,10 +34,6 @@ int atomic_fetch_add(volatile int *ptr, int val) {
     return old_val;
 }
 
-void atomic_add(volatile int *ptr, int val) {
-    (void)atomic_fetch_add(ptr, val);
-}
-
 int atomic_exchange(volatile int *ptr, int val) {
     int old_val, ret;
     do {
@@ -63,7 +59,7 @@ void pg_barrier_at(int barrier_id, int ncores) {
 
     if (count == ncores) { // last core to arrive
         barrier_count[barrier_id] = 0;
-        atomic_add(&barrier_phase[barrier_id], 1);
+        atomic_fetch_add(&barrier_phase[barrier_id], 1);
     } else { // wait for phase change
         while (barrier_phase[barrier_id] == phase) {}
     }

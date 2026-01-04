@@ -1,4 +1,5 @@
 #include "test_common.h"
+#include <stdlib.h>
 
 /* Shared variables for tests */
 static volatile int fetch_add_counter;
@@ -130,53 +131,35 @@ test_result_t test_fetch_add_concurrent_1000(int hart_id, int ncores)
     return result;
 }
 
-test_result_t test_atomic_add_basic(int hart_id, int ncores)
+test_result_t test_fetch_add_concurrent_1000_with_random_nop(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "atomic_add_basic", .passed = 0, .failed = 0 };
-
-    if (hart_id == 0) {
-        add_counter = 0;
-
-        atomic_add(&add_counter, 10);
-        TEST_ASSERT_EQ(10, add_counter, &result, "counter should be 10");
-
-        atomic_add(&add_counter, 20);
-        TEST_ASSERT_EQ(30, add_counter, &result, "counter should be 30");
-
-        atomic_add(&add_counter, -15);
-        TEST_ASSERT_EQ(15, add_counter, &result, "counter should be 15");
-    }
-
-    pg_barrier_at(BARRIER_TEST_RUN, ncores);
-    return result;
-}
-
-test_result_t test_atomic_add_concurrent(int hart_id, int ncores)
-{
-    test_result_t result = { .name = "atomic_add_concurrent", .passed = 0, .failed = 0 };
-    const int ITERATIONS = 100;
+    test_result_t result = { .name = "fetch_add_concurrent_1000_with_random_nop", .passed = 0, .failed = 0 };
+    const int ITERATIONS = 1000;
 
     /* Setup */
     if (hart_id == 0) {
-        add_counter = 0;
+        fetch_add_counter = 0;
+        srand(42);
     }
     pg_barrier_at(BARRIER_TEST_SETUP, ncores);
 
-    /* Each core adds (hart_id + 1) * ITERATIONS times with value 1 */
-    int add_value = hart_id + 1;
+    /* Each core increments 1000 times with random NOPs */
     for (int i = 0; i < ITERATIONS; i++) {
-        atomic_add(&add_counter, add_value);
+        atomic_fetch_add(&fetch_add_counter, 1);
+
+        int nop_count = rand() % 100; // Random NOPs between 0-99
+        for (int j = 0; j < nop_count; j++) {
+            asm volatile ("nop");
+        }
     }
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
     /* Verify */
     if (hart_id == 0) {
-        /* Expected: sum of (hart_id+1) * ITERATIONS for all harts */
-        /* = ITERATIONS * sum(1 to ncores) = ITERATIONS * ncores*(ncores+1)/2 */
-        int expected = ITERATIONS * ncores * (ncores + 1) / 2;
-        TEST_ASSERT_EQ(expected, add_counter, &result,
-            "counter should equal expected sum");
+        int expected = ncores * ITERATIONS;
+        TEST_ASSERT_EQ(expected, fetch_add_counter, &result,
+            "counter should equal ncores*1000 with random NOPs");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
