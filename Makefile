@@ -16,7 +16,8 @@ build:
 
 prog:
 	mkdir -p build
-	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles $(c_includes) -Tapp/link.ld \
+	$(GCC) -Os -march=rv32ima -mabi=ilp32 -nostartfiles -ffunction-sections -fdata-sections -Wl,--gc-sections \
+		$(c_includes) -Tapp/link.ld \
 		-Wl,--defsym,_num_cores=$(NCORES) \
 		-Wl,--defsym,IMEM_SIZE=$(IMEM_SIZE_HEX) \
 		-Wl,--defsym,DMEM_SIZE=$(DMEM_SIZE_HEX) \
