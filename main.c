@@ -1,4 +1,3 @@
-/* Test program for RV32A LR/SC instructions */
 #include "atomic.h"
 #include "st7789.h"
 #include "util.h"
@@ -18,7 +17,7 @@ int main()
 
     // Each core increments the shared counter ITERATIONS times
     for (int i = 0; i < ITERATIONS; i++) {
-        atomic_add(&shared_counter, 1);
+        atomic_fetch_add(&shared_counter, 1);
     }
 
     pg_barrier();

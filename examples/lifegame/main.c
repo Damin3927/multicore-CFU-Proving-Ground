@@ -167,14 +167,14 @@ enum Barriers {
 int main_worker(int start_x, int end_x, int hart_id) {
     for (int loop = 0; loop <= LOOPS; (LOOPS == 0) ? 0 : loop++)
     {
-        pg_barrier_at(INITIALIZE);
+        pg_barrier_at(INITIALIZE, NCORES);
 
         for (int step = 0; step < STEPS; step++)
         {
             print_grid(grid, start_x, end_x);
 
             update_grid(grid, nGrid, start_x, end_x);
-            pg_barrier_at(UPDATE_GRID);
+            pg_barrier_at(UPDATE_GRID, NCORES);
 
             for (int i = 0; i < HEIGHT; i++)
             {
@@ -184,7 +184,7 @@ int main_worker(int start_x, int end_x, int hart_id) {
                 }
             }
 
-            pg_barrier_at(UPDATE_NEXT);
+            pg_barrier_at(UPDATE_NEXT, NCORES);
         }
     }
 
@@ -203,7 +203,7 @@ int main_master(int start_x, int end_x) {
     for (int loop = 0; loop <= LOOPS; (LOOPS == 0) ? 0 : loop++)
     {
         initialize(grid, loop);
-        pg_barrier_at(INITIALIZE);
+        pg_barrier_at(INITIALIZE, NCORES);
 
         for (int step = 0; step < STEPS; step++)
         {
@@ -215,7 +215,7 @@ int main_master(int start_x, int end_x) {
             pg_lcd_prints_8x8(buf);
 
             update_grid(grid, nGrid, start_x, end_x);
-            pg_barrier_at(UPDATE_GRID);
+            pg_barrier_at(UPDATE_GRID, NCORES);
 
             for (int i = 0; i < HEIGHT; i++)
             {
@@ -225,7 +225,7 @@ int main_master(int start_x, int end_x) {
                 }
             }
 
-            pg_barrier_at(UPDATE_NEXT);
+            pg_barrier_at(UPDATE_NEXT, NCORES);
         }
     }
 
