@@ -5,6 +5,8 @@
 #define NCORES 4
 #endif
 
+static const int pg_barrier_default = PG_MAX_BARRIERS - 1;
+
 static volatile int barrier_count[PG_MAX_BARRIERS];
 static volatile int barrier_phase[PG_MAX_BARRIERS];
 
@@ -32,10 +34,6 @@ int atomic_fetch_add(volatile int *ptr, int val) {
     return old_val;
 }
 
-void atomic_add(volatile int *ptr, int val) {
-    (void)atomic_fetch_add(ptr, val);
-}
-
 int atomic_exchange(volatile int *ptr, int val) {
     int old_val, ret;
     do {
@@ -51,7 +49,7 @@ int atomic_exchange(volatile int *ptr, int val) {
     return old_val;
 }
 
-void pg_barrier_at(int barrier_id) {
+void pg_barrier_at(int barrier_id, int ncores) {
     if (!valid_barrier(barrier_id)) {
         return;
     }
@@ -59,14 +57,14 @@ void pg_barrier_at(int barrier_id) {
     int phase = barrier_phase[barrier_id];
     int count = atomic_fetch_add(&barrier_count[barrier_id], 1) + 1;
 
-    if (count == NCORES) { // last core to arrive
+    if (count == ncores) { // last core to arrive
         barrier_count[barrier_id] = 0;
-        atomic_add(&barrier_phase[barrier_id], 1);
+        atomic_fetch_add(&barrier_phase[barrier_id], 1);
     } else { // wait for phase change
         while (barrier_phase[barrier_id] == phase) {}
     }
 }
 
 void pg_barrier(void) {
-    pg_barrier_at(PG_BARRIER_DEFAULT);
+    pg_barrier_at(pg_barrier_default, NCORES);
 }
