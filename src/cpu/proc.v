@@ -20,11 +20,9 @@ module cpu (
     output wire                        dbus_is_lr_o,
     output wire                        dbus_is_sc_o,
     input  wire [`DBUS_DATA_WIDTH-1:0] dbus_rdata_i,
-    output wire                        insnret,
     input  wire                        hart_index
 );
     wire w_stall = stall_i;
-    assign insnret = !stall_i && !stall && MaWb_v;
 
 //------------------------------------------------------------------------------
 // pipeline registers
