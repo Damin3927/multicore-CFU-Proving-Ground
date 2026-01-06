@@ -89,6 +89,19 @@ void print_grid(volatile int grid[HEIGHT][WIDTH], int start_x, int end_x)
     }
 }
 
+void print_grid_to_console(volatile int grid[HEIGHT][WIDTH])
+{
+    for (int i = 0; i < HEIGHT; i++)
+    {
+        for (int j = 0; j < WIDTH; j++)
+        {
+            pg_printd(grid[i][j]);
+            prints(" ");
+        }
+        prints("\n");
+    }
+}
+
 /*******************************************************************************/
 void count_neighbor(volatile int grid[HEIGHT][WIDTH],
                     int row, int col, int *count, int *sum)
@@ -226,6 +239,11 @@ int main_master(int start_x, int end_x) {
     sprintf(buf, "cycle      : %15lld  \n", cycle);
     prints(buf);
     prints("------------------------------\n");
+
+    if (USE_LCD == 0) {
+        // print final state for validation
+        print_grid_to_console(grid);
+    }
     return 0;
 }
 
