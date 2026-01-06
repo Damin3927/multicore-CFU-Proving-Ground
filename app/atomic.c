@@ -18,6 +18,14 @@ static inline int valid_barrier(int barrier_id) {
     return barrier_id >= 0 && barrier_id < PG_MAX_BARRIERS;
 }
 
+void inline spinlock_acquire(volatile spinlock_t *lock) {
+    while (atomic_exchange(lock, 1) != 0) {}
+}
+
+void inline spinlock_release(volatile spinlock_t *lock) {
+    *lock = 0;
+}
+
 int atomic_fetch_add(volatile int *ptr, int val) {
     int old_val, new_val, ret;
     do {

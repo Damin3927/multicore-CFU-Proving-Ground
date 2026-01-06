@@ -34,8 +34,8 @@ build:
 clean:
 	$(MAKE) -C $(CFUPG_ROOT) clean
 	$(MAKE) -C $(COREMARK_PRO_SRC) \
-		-I$(PWD)/$(COREMARK_PRO_SRC)/util/make \
-		-I$(PWD)/$(COREMARK_PRO_DIR) \
+		-I$(COREMARK_PRO_SRC)/util/make \
+		-I$(COREMARK_PRO_DIR) \
 		TARGET=cfupg \
 		TOOLCHAIN=riscv32-cfupg \
 		distclean
