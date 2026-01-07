@@ -56,9 +56,9 @@ test_result_t test_fetch_add_negative(int hart_id, int ncores)
     return result;
 }
 
-test_result_t test_fetch_add_concurrent_100(int hart_id, int ncores)
+test_result_t test_fetch_add_100(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_concurrent_100", .passed = 0, .failed = 0 };
+    test_result_t result = { .name = "fetch_add_100", .passed = 0, .failed = 0 };
     const int ITERATIONS = 100;
 
     /* Setup */
@@ -102,9 +102,9 @@ test_result_t test_fetch_add_concurrent_100(int hart_id, int ncores)
     return result;
 }
 
-test_result_t test_fetch_add_concurrent_1000(int hart_id, int ncores)
+test_result_t test_fetch_add_1000(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_concurrent_1000", .passed = 0, .failed = 0 };
+    test_result_t result = { .name = "fetch_add_1000", .passed = 0, .failed = 0 };
     const int ITERATIONS = 1000;
 
     /* Setup */
@@ -131,9 +131,9 @@ test_result_t test_fetch_add_concurrent_1000(int hart_id, int ncores)
     return result;
 }
 
-test_result_t test_fetch_add_concurrent_1000_with_random_nop(int hart_id, int ncores)
+test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_concurrent_1000_with_random_nop", .passed = 0, .failed = 0 };
+    test_result_t result = { .name = "fetch_add_1000_random_nop", .passed = 0, .failed = 0 };
     const int ITERATIONS = 1000;
 
     /* Setup */
