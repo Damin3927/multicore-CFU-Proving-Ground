@@ -7,21 +7,11 @@ set part_name xc7a35ticpg236-1L
 set src_files [concat $top_dir/config.vh [glob -nocomplain $top_dir/src/*.v $top_dir/src/**/*.v]]
 set nproc [exec nproc]
 
-set file [open "$top_dir/config.vh"]
-set config_content [read $file]
-close $file
-
-if {[regexp {`define\s+CLK_FREQ_MHZ\s+(\d+)} $config_content -> freq]} {
-    puts "Found frequency: $freq MHz"
-} else {
-    puts "CLK_FREQ_MHZ not found in config.vh"
-    exit 1
-}
-
 # Default values
 set ncores 4
 set imem_size ""
 set dmem_size ""
+set freq 140
 
 create_project -force $proj_name $top_dir/vivado -part $part_name
 set_property strategy Flow_PerfOptimized_high [get_runs synth_1]
@@ -54,6 +44,15 @@ for {set i 0} {$i < $argc} {incr i} {
             puts "DMEM_SIZE set to: $dmem_size"
         } else {
             puts "Error: --dmem_size requires a value"
+            exit 1
+        }
+    } elseif {[lindex $argv $i] eq "--clk_freq"} {
+        incr i
+        if {$i < $argc} {
+            set freq [lindex $argv $i]
+            puts "CLK_FREQ_MHZ set to: $freq"
+        } else {
+            puts "Error: --clk_freq requires a value"
             exit 1
         }
     } elseif {[lindex $argv $i] eq "--hls"} {
