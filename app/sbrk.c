@@ -11,16 +11,6 @@ extern char _heap_end;
 static char *heap_ptr = 0;
 static volatile int sbrk_lock = 0;
 
-static inline void spinlock_acquire(volatile int *lock)
-{
-    while (atomic_exchange(lock, 1) != 0);
-}
-
-static inline void spinlock_release(volatile int *lock)
-{
-    *lock = 0;
-}
-
 void *_sbrk(int incr)
 {
     char *prev_heap_ptr;
