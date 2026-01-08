@@ -10,6 +10,7 @@ USE_HLS ?= 0
 NCORES ?= 4
 IMEM_SIZE_KB ?= 128
 DMEM_SIZE_KB ?= 128
+CLK_FREQ_MHZ ?= 140
 
 IMEM_SIZE ?= $(shell echo $(IMEM_SIZE_KB)*1024 | bc)
 DMEM_SIZE ?= $(shell echo $(DMEM_SIZE_KB)*1024 | bc)

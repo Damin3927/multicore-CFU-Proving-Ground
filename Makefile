@@ -1,6 +1,8 @@
 # CFU Proving Ground since 2025-02    Copyright(c) 2025 Archlab. Science Tokyo
 # Released under the MIT license https://opensource.org/licenses/mit
 
+SHELL := /bin/bash
+
 include config.mk
 
 #TARGET := arty_a7
@@ -11,7 +13,7 @@ TARGET := nexys_a7
 all: prog build
 
 build:
-	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(verilog_srcs)
+	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) -DCLK_FREQ_MHZ=$(CLK_FREQ_MHZ) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(verilog_srcs)
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
@@ -68,7 +70,7 @@ bit:
 		echo "Plese run 'make init' first."; \
 		exit 1; \
 	fi
-	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) --imem_size $(IMEM_SIZE) --dmem_size $(DMEM_SIZE) $(if $(filter 1,$(USE_HLS)),--hls)
+	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) --imem_size $(IMEM_SIZE) --dmem_size $(DMEM_SIZE) --clk_freq $(CLK_FREQ_MHZ) $(if $(filter 1,$(USE_HLS)),--hls)
 	cp vivado/main.runs/impl_1/main.bit build/.
 	@if [ -f vivado/main.runs/impl_i/main.ltx ]; then \
 		cp -f vivado/main.runs/impl_i/main.ltx build/.; \
@@ -81,8 +83,31 @@ conf:
 	fi
 	$(VIVADO) -mode batch -source scripts/prog_dev.tcl
 
+CFU_HLS_SRC ?= cfu_hls.c
+CFU_HLS_PART ?= xc7a35tcsg324-1
+
+define CFU_HLS_CFG
+part=$(CFU_HLS_PART)
+
+[hls]
+flow_target=vivado
+package.output.format=rtl
+package.output.syn=false
+syn.top=cfu_hls
+syn.file=$(CFU_HLS_SRC)
+clock=$(CLK_FREQ_MHZ)MHz
+syn.rtl.reset=none
+syn.rtl.fsm_encoding=auto
+syn.directive.interface=cfu_hls rslt_o mode=ap_none
+syn.interface.clock_enable=0
+syn.rtl.register_all_io=1
+endef
+export CFU_HLS_CFG
+
 vpp:
-	$(VPP) -c --mode hls --config constr/cfu_hls.cfg --work_dir vitis
+	echo "$$CFU_HLS_CFG" > /tmp/cfu_hls_$$$$.cfg && \
+	$(VPP) -c --mode hls --config /tmp/cfu_hls_$$$$.cfg --work_dir vitis; \
+	rm -f /tmp/cfu_hls_$$$$.cfg
 	if [ -d $(cfu_dir) ]; then rm -rf $(cfu_dir); fi
 	mkdir -p $(cfu_dir)
 	cp vitis/hls/impl/verilog/*.v $(cfu_dir)/.

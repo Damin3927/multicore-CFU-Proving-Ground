@@ -26,8 +26,7 @@ prog:
 	$(MAKE) -C $(CFUPG_ROOT) initf
 
 .PHONY: build
-build:
-	$(MAKE) prog
+build: prog
 	$(MAKE) -C $(CFUPG_ROOT) build
 
 .PHONY: clean

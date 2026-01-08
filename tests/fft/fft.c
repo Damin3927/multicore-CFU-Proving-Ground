@@ -174,9 +174,10 @@ int main ()
     init_f(f, hart_id, NCORES);
     pg_barrier();
 
+    unsigned long long start = start_measurement(hart_id);
+
     do_bit_reversal(f, hart_id, NCORES);
 
-    unsigned long long start = start_measurement(hart_id);
     pg_barrier();
 
     fft(f, hart_id, NCORES);

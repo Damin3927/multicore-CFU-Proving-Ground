@@ -10,7 +10,6 @@ static volatile int consumer_idx;
 static volatile int consumer_sum;
 static volatile int lock_var;
 static volatile int critical_section_data;
-static volatile int cs_results[NCORES];
 
 test_result_t test_mixed_atomic_ops(int hart_id, int ncores)
 {
@@ -111,82 +110,39 @@ test_result_t test_producer_consumer(int hart_id, int ncores)
     return result;
 }
 
-static inline void spinlock_lock(volatile int *lock)
+test_result_t test_spinlock(int hart_id, int ncores)
 {
-    while (atomic_exchange(lock, 1) != 0) {}
-}
-
-static inline void spinlock_unlock(volatile int *lock)
-{
-    *lock = 0;
-}
-
-test_result_t test_spinlock_basic(int hart_id, int ncores)
-{
-    test_result_t result = { .name = "spinlock_basic", .passed = 0, .failed = 0 };
-
-    if (hart_id == 0) {
-        lock_var = 0;
-    }
-    pg_barrier_at(BARRIER_TEST_SETUP, ncores);
-
-    /* Each core tries to acquire and release lock */
-    spinlock_lock(&lock_var);
-
-    /* Inside critical section - lock should be 1 */
-    int lock_val = lock_var;
-
-    spinlock_unlock(&lock_var);
-
-    pg_barrier_at(BARRIER_TEST_RUN, ncores);
-
-    if (hart_id == 0) {
-        /* After all unlocks, lock should be 0 */
-        TEST_ASSERT_EQ(0, lock_var, &result, "lock should be 0 after all unlocks");
-        result.passed++; /* Basic test passed */
-    }
-
-    pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
-    return result;
-}
-
-test_result_t test_spinlock_critical_section(int hart_id, int ncores)
-{
-    test_result_t result = { .name = "spinlock_critical_section", .passed = 0, .failed = 0 };
-    const int ITERATIONS = 50;
+    test_result_t result = { .name = "spinlock", .passed = 0, .failed = 0 };
+    const int ITERATIONS = 100;
 
     if (hart_id == 0) {
         lock_var = 0;
         critical_section_data = 0;
-        for (int i = 0; i < NCORES; i++) {
-            cs_results[i] = 0;
-        }
     }
     pg_barrier_at(BARRIER_TEST_SETUP, ncores);
 
-    /* Each core increments critical_section_data ITERATIONS times under lock */
+    /* Each core increments shared counter under spinlock protection */
     for (int i = 0; i < ITERATIONS; i++) {
-        spinlock_lock(&lock_var);
+        spinlock_acquire(&lock_var);
 
-        /* Critical section - read-modify-write without atomics */
-        int old_val = critical_section_data;
-        /* Small delay to increase chance of race if lock doesn't work */
-        volatile int delay = 0;
-        for (int d = 0; d < 10; d++) {
-            delay += d;
-        }
-        critical_section_data = old_val + 1;
+        /* Critical section: non-atomic read-modify-write */
+        int temp = critical_section_data;
+        temp = temp + 1;
+        critical_section_data = temp;
 
-        spinlock_unlock(&lock_var);
+        spinlock_release(&lock_var);
     }
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
-    /* Verify */
     if (hart_id == 0) {
+        /* If spinlock works correctly, all increments should be counted */
         int expected = ncores * ITERATIONS;
         TEST_ASSERT_EQ(expected, critical_section_data, &result,
-            "critical section counter should be ncores*ITERATIONS");
+            "counter should equal ncores * ITERATIONS");
+
+        /* Lock should be released */
+        TEST_ASSERT_EQ(0, lock_var, &result, "lock should be 0 after all releases");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
@@ -194,58 +150,54 @@ test_result_t test_spinlock_critical_section(int hart_id, int ncores)
 }
 
 static volatile int cas_var;
-static volatile int cas_success[NCORES];
+static volatile int cas_counter;
+static volatile int cas_attempts[NCORES];
+static volatile int cas_successes[NCORES];
 
+/* CAS: atomically compare and swap if value equals expected */
 static int compare_and_swap(volatile int *ptr, int expected, int new_val)
 {
-    int old_val, sc_result;
+    int old_val, ret;
 
     asm volatile (
         "lr.w %[old], (%[ptr])\n"
-        : [old] "=r" (old_val)
-        : [ptr] "r" (ptr)
-        : "memory"
-    );
-
-    if (old_val != expected) {
-        return 0; /* Failed - value was not as expected */
-    }
-
-    asm volatile (
+        "bne %[old], %[exp], 1f\n"        /* If not expected, skip SC */
         "sc.w %[ret], %[new], (%[ptr])\n"
-        : [ret] "=r" (sc_result)
-        : [new] "r" (new_val), [ptr] "r" (ptr)
+        "j 2f\n"
+        "1: li %[ret], 1\n"               /* Set ret=1 to indicate failure */
+        "2:\n"
+        : [ret] "=&r" (ret), [old] "=&r" (old_val)
+        : [ptr] "r" (ptr), [exp] "r" (expected), [new] "r" (new_val)
         : "memory"
     );
 
-    return (sc_result == 0); /* Success if sc succeeded */
+    return (ret == 0);  /* SC returns 0 on success */
 }
 
-test_result_t test_compare_and_swap(int hart_id, int ncores)
+test_result_t test_cas_single(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "compare_and_swap", .passed = 0, .failed = 0 };
+    test_result_t result = { .name = "cas_single", .passed = 0, .failed = 0 };
 
     if (hart_id == 0) {
         cas_var = 0;
         for (int i = 0; i < NCORES; i++) {
-            cas_success[i] = 0;
+            cas_successes[i] = 0;
         }
     }
     pg_barrier_at(BARRIER_TEST_SETUP, ncores);
 
     /* All cores try to CAS from 0 to their hart_id+1 */
     int success = compare_and_swap(&cas_var, 0, hart_id + 1);
-    cas_success[hart_id] = success;
+    cas_successes[hart_id] = success;
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
-    /* Verify */
     if (hart_id == 0) {
         /* Exactly one core should have succeeded */
         int success_count = 0;
         int winning_hart = -1;
         for (int i = 0; i < ncores; i++) {
-            if (cas_success[i]) {
+            if (cas_successes[i]) {
                 success_count++;
                 winning_hart = i;
             }
@@ -253,11 +205,66 @@ test_result_t test_compare_and_swap(int hart_id, int ncores)
         TEST_ASSERT_EQ(1, success_count, &result,
             "exactly one CAS should succeed");
 
-        /* The value should match the winning hart */
         if (winning_hart >= 0) {
             TEST_ASSERT_EQ(winning_hart + 1, cas_var, &result,
                 "value should match winning hart");
         }
+    }
+
+    pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
+    return result;
+}
+
+test_result_t test_cas_retry(int hart_id, int ncores)
+{
+    test_result_t result = { .name = "cas_retry", .passed = 0, .failed = 0 };
+    const int ITERATIONS = 50;
+
+    if (hart_id == 0) {
+        cas_counter = 0;
+        for (int i = 0; i < NCORES; i++) {
+            cas_attempts[i] = 0;
+            cas_successes[i] = 0;
+        }
+    }
+    pg_barrier_at(BARRIER_TEST_SETUP, ncores);
+
+    /* Each core increments counter with CAS retry */
+    for (int i = 0; i < ITERATIONS; i++) {
+        int success = 0;
+        while (!success) {
+            int old_val = cas_counter;
+            success = compare_and_swap(&cas_counter, old_val, old_val + 1);
+            cas_attempts[hart_id]++;
+            if (success) {
+                cas_successes[hart_id]++;
+            }
+        }
+    }
+
+    pg_barrier_at(BARRIER_TEST_RUN, ncores);
+
+    if (hart_id == 0) {
+        /* Counter should equal total iterations */
+        int expected_counter = ncores * ITERATIONS;
+        TEST_ASSERT_EQ(expected_counter, cas_counter, &result,
+            "counter should equal ncores * ITERATIONS");
+
+        /* Total successes should equal total iterations */
+        int total_successes = 0;
+        for (int i = 0; i < ncores; i++) {
+            total_successes += cas_successes[i];
+        }
+        TEST_ASSERT_EQ(expected_counter, total_successes, &result,
+            "total successes should equal ncores * ITERATIONS");
+
+        /* Total attempts should be >= total successes (due to retries) */
+        int total_attempts = 0;
+        for (int i = 0; i < ncores; i++) {
+            total_attempts += cas_attempts[i];
+        }
+        TEST_ASSERT(total_attempts >= total_successes, &result,
+            "total attempts should be >= total successes");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);

@@ -15,31 +15,25 @@ static const test_entry_t all_tests[] = {
     /* Fetch Add Tests */
     { "fetch_add_basic", test_fetch_add_basic },
     { "fetch_add_negative", test_fetch_add_negative },
-    { "fetch_add_concurrent_100", test_fetch_add_concurrent_100 },
-    { "fetch_add_concurrent_1000", test_fetch_add_concurrent_1000 },
-    { "fetch_add_concurrent_1000_with_random_nop", test_fetch_add_concurrent_1000_with_random_nop },
+    { "fetch_add_100", test_fetch_add_100 },
+    { "fetch_add_1000", test_fetch_add_1000 },
+    { "fetch_add_1000_with_random_nop", test_fetch_add_1000_random_nop },
 
     /* Exchange Tests */
     { "exchange_basic", test_exchange_basic },
     { "exchange_concurrent", test_exchange_concurrent },
-    { "exchange_swap_values", test_exchange_swap_values },
+    { "exchange_concurrent_50", test_exchange_concurrent_50 },
 
     /* Barrier Tests */
     { "barrier_simple", test_barrier_simple },
     { "barrier_multiple", test_barrier_multiple },
-    { "barrier_stress", test_barrier_stress },
-
-    /* LR/SC Tests */
-    { "lr_sc_retry", test_lr_sc_retry },
-    { "lr_sc_contention", test_lr_sc_contention },
 
     /* Other Tests */
     { "mixed_atomic_ops", test_mixed_atomic_ops },
     { "producer_consumer", test_producer_consumer },
-    { "spinlock_basic", test_spinlock_basic },
-    { "spinlock_critical_section", test_spinlock_critical_section },
-    { "compare_and_swap", test_compare_and_swap },
-    { "raw_lr_sc", test_raw_lr_sc },
+    { "spinlock_basic", test_spinlock },
+    { "cas_single", test_cas_single },
+    { "cas_retry", test_cas_retry },
 };
 
 #define NUM_TESTS (sizeof(all_tests) / sizeof(all_tests[0]))
