@@ -11,7 +11,7 @@ NCORES ?= 4
 IMEM_SIZE_KB ?= 128
 DMEM_SIZE_KB ?= 120
 STACK_SIZE_KB ?= 2
-CLK_FREQ_MHZ ?= 140
+CLK_FREQ_MHZ ?= 135
 
 IMEM_SIZE ?= $(shell echo $(IMEM_SIZE_KB)*1024 | bc)
 DMEM_SIZE ?= $(shell echo $(DMEM_SIZE_KB)*1024 | bc)
