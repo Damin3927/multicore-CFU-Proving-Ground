@@ -24,7 +24,8 @@
 #define draw_point pg_lcd_draw_point
 #else
 #define prints pg_prints
-#define draw_point
+volatile int dummy_sink;
+static inline void draw_point(int x, int y, int c) { dummy_sink = x + y + c; } // Avoid optimization
 #endif
 
 /*******************************************************************************/

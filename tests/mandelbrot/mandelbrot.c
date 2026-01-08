@@ -13,9 +13,8 @@
 
 #define X_PIX  240     // display width
 #define Y_PIX  240     // display height
-#define ROWS_PER_CORE (Y_PIX / NCORES)
 #define ITER_MAX 256
-#define COUNT_MAX 100
+#define COUNT_MAX 5
 
 #define USE_LCD 0
 
@@ -25,16 +24,12 @@
 #define printd pg_lcd_printd
 #else
 #define prints pg_prints
-#define draw_point
+volatile int dummy_sink;
+static inline void draw_point(int x, int y, int c) { dummy_sink = x + y + c; } // Avoid optimization
 #define printd pg_printd
 #endif
 
 // Shared variables
-volatile float x_min = 0.270851;
-volatile float x_max = 0.270900;
-volatile float y_min = 0.004641;
-volatile float y_max = 0.004713;
-
 volatile int current_row = 1; // between 1 and Y_PIX
 
 void draw_pixel(int x, int y, int k)
@@ -56,8 +51,11 @@ static inline unsigned int cfu_op(unsigned int funct7, unsigned int funct3,
     *rd = result;
 }
 
-void mandelbrot(int row)
+void mandelbrot(int row, float x_max, float y_max)
 {
+    float x_min = 0.270851;
+    float y_min = 0.004641;
+
     float dx = (x_max - x_min) / X_PIX;
     float dy = (y_max - y_min) / Y_PIX;
 
@@ -97,22 +95,22 @@ int main()
 
     int cnt = 0;
     float delta = 0.00000300;
+    float x_max = 0.270900;
+    float y_max = 0.004713;
 
     pg_perf_disable();
     pg_perf_reset();
     pg_perf_enable();
 
     while (1) {
-        if (hart_id == 0) {
-            cnt++;
+        cnt++;
 
-            if (cnt % 512 == 0) {
-                delta *= -1;
-            }
-
-            x_max += delta;
-            y_max += delta;
+        if (cnt % 512 == 0) {
+            delta *= -1;
         }
+
+        x_max += delta;
+        y_max += delta;
 
         pg_barrier();
         while (1) {
@@ -120,7 +118,7 @@ int main()
             if (row > Y_PIX) {
                 break;
             }
-            mandelbrot(row);
+            mandelbrot(row, x_max, y_max);
         }
         pg_barrier();
 
@@ -137,9 +135,9 @@ int main()
         }
 #endif
     }
-    unsigned long long cycle = pg_perf_cycle();
-    char buf[64];
     if (hart_id == 0) {
+        unsigned long long cycle = pg_perf_cycle();
+        char buf[64];
         sprintf(buf, "cycle      : %15lld  \n", cycle);
         prints(buf);
     }
