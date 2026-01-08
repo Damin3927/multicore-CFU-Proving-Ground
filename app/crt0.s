@@ -38,12 +38,7 @@ _start:
     li      x29, 0
     li      x30, 0
     li      x31, 0
-    li      t0, 0x40001000
-    lw      t1, 0(t0)
-    la      t2, _stack_size_per_core
-    mul     t1, t1, t2
     la      sp, _fstack
-    sub     sp, sp, t1
     jal     main
     j       finish
 
