@@ -901,3 +901,5 @@ module decoder (
     assign alu_ctrl_o = {alu_c8, alu_c7, alu_c6, alu_c5, alu_c4, alu_c3, alu_c2, alu_c1, alu_c0};
 endmodule
 /******************************************************************************************/
+
+`resetall

@@ -86,9 +86,9 @@ test_result_t test_exchange_concurrent(int hart_id, int ncores)
     return result;
 }
 
-test_result_t test_exchange_swap_values(int hart_id, int ncores)
+test_result_t test_exchange_concurrent_50(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "exchange_swap_values", .passed = 0, .failed = 0 };
+    test_result_t result = { .name = "exchange_concurrent_50", .passed = 0, .failed = 0 };
     const int ROUNDS = 50;
 
     if (hart_id == 0) {

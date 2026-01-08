@@ -57,22 +57,21 @@ enum TestBarriers {
 /* Test declarations */
 test_result_t test_fetch_add_basic(int hart_id, int ncores);
 test_result_t test_fetch_add_negative(int hart_id, int ncores);
-test_result_t test_fetch_add_concurrent_100(int hart_id, int ncores);
-test_result_t test_fetch_add_concurrent_1000(int hart_id, int ncores);
-test_result_t test_fetch_add_concurrent_1000_with_random_nop(int hart_id, int ncores);
+test_result_t test_fetch_add_100(int hart_id, int ncores);
+test_result_t test_fetch_add_1000(int hart_id, int ncores);
+test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores);
+
 test_result_t test_exchange_basic(int hart_id, int ncores);
 test_result_t test_exchange_concurrent(int hart_id, int ncores);
-test_result_t test_exchange_swap_values(int hart_id, int ncores);
+test_result_t test_exchange_concurrent_50(int hart_id, int ncores);
+
 test_result_t test_barrier_simple(int hart_id, int ncores);
 test_result_t test_barrier_multiple(int hart_id, int ncores);
-test_result_t test_barrier_stress(int hart_id, int ncores);
-test_result_t test_lr_sc_retry(int hart_id, int ncores);
-test_result_t test_lr_sc_contention(int hart_id, int ncores);
+
 test_result_t test_mixed_atomic_ops(int hart_id, int ncores);
 test_result_t test_producer_consumer(int hart_id, int ncores);
-test_result_t test_spinlock_basic(int hart_id, int ncores);
-test_result_t test_spinlock_critical_section(int hart_id, int ncores);
-test_result_t test_compare_and_swap(int hart_id, int ncores);
-test_result_t test_raw_lr_sc(int hart_id, int ncores);
+test_result_t test_spinlock(int hart_id, int ncores);
+test_result_t test_cas_single(int hart_id, int ncores);
+test_result_t test_cas_retry(int hart_id, int ncores);
 
 #endif /* TEST_COMMON_H */

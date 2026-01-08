@@ -11,7 +11,9 @@
 `define LCD_ROTATE 0 // 0: 0 degree, 1: 90 degree, 2: 180 degree, 3: 270 degree (Left Rotate)
 
 // cpu
+`ifndef CLK_FREQ_MHZ
 `define CLK_FREQ_MHZ 135  // operating clock frequency in MHz
+`endif
 
 `define RESET_VECTOR 'h00000000
 
