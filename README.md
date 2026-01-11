@@ -113,9 +113,9 @@ If you change the size of the data memory, please appropriately modify the LENGT
 
 | addr   |  description                     |
 | -----------| -----------------------------|
-| 0x00000000 - 0x00007FFF | 32KiB Instruction Memory     |
-| 0x10000000 - 0x17FFFFFF | Shared Data Memory           |
-| 0x18000000 - 0x18001FFF | Per-core Stacks  |
+| 0x00000000 - 0x0001FFFF | 128KiB Instruction Memory    |
+| 0x10000000 - 0x1001DFFF | 120KiB Shared Data Memory    |
+| 0x18000000 - 0x180007FF | 2KiB Per-core Stacks         |
 | 0x20000000 - 0x2000FFFF | 64KiB Video Memory    |
 | 0x40000000 | performance counter control (0: reset, 1: start, 2: stop)|
 | 0x40000004 | mcycle                  |
