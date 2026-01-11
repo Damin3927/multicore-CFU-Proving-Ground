@@ -30,13 +30,22 @@ static inline void draw_point(int x, int y, int c)
 #define printd pg_printd
 #endif
 
+#define VERIFY_RESULT 0
+
 // Shared variables
 volatile int current_row = 1; // between 1 and Y_PIX
+
+#if VERIFY_RESULT
+volatile int[X_PIX][Y_PIX] current_draw_result;
+#endif
 
 void draw_pixel(int x, int y, int k)
 {
     int color = ((k & 0x7f) << 11) ^ ((k & 0x7f) << 7) ^ (k & 0x7f);
     draw_point(x, y, color);
+#if VERIFY_RESULT
+    current_draw_result[x - 1][y - 1] = color;
+#endif
 }
 
 static inline unsigned int cfu_op(unsigned int funct7, unsigned int funct3, unsigned int rs1,
@@ -121,6 +130,19 @@ int main(void)
             printd(cnt);
             prints("\n");
             current_row = 1;
+#if VERIFY_RESULT
+            prints("COUNT ");
+            printd(cnt);
+            prints(" RESULT:\n");
+
+            for (int x = 1; x <= X_PIX; x++) {
+                for (int y = 1; y <= Y_PIX; y++) {
+                    printd(current_draw_result[x - 1][y - 1]);
+                    prints(" ");
+                }
+                prints("\n");
+            }
+#endif
         }
 
 #ifdef COUNT_MAX
