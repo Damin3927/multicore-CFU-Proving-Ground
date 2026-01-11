@@ -1,11 +1,12 @@
 /* CFU Proving Ground since 2025-02    Copyright(c) 2025 Archlab. Science Tokyo /
 / Released under the MIT license https://opensource.org/licenses/mit           */
 
-#include <stdlib.h>
 #include "atomic.h"
-#include "st7789.h"
 #include "perf.h"
+#include "st7789.h"
 #include "util.h"
+
+#include <stdlib.h>
 
 #ifndef NCORES
 #define NCORES 4 // number of cores
@@ -14,7 +15,8 @@
 volatile int count = 0;
 volatile spinlock_t lock = 0;
 
-void RandomChar() {
+void RandomChar()
+{
     while (1) {
         int x = rand() % 240;
         int y = rand() % 240;
@@ -34,7 +36,8 @@ void RandomChar() {
     }
 }
 
-int main () {
+int main()
+{
     int hart_id = pg_hart_id();
     if (hart_id != 0) {
         pg_lcd_reset();
