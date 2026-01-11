@@ -1,0 +1,5 @@
+tests/coremark-pro
+build
+obj_dir
+vivado
+vitis

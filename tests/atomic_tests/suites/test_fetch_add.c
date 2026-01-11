@@ -1,7 +1,6 @@
 #include "test_common.h"
 #include <stdlib.h>
 
-/* Shared variables for tests */
 static volatile int fetch_add_counter;
 static volatile int fetch_add_results[NCORES];
 static volatile int add_counter;
@@ -46,7 +45,6 @@ test_result_t test_fetch_add_negative(int hart_id, int ncores)
         TEST_ASSERT_EQ(90, old, &result, "fetch_add(-50) should return 90");
         TEST_ASSERT_EQ(40, fetch_add_counter, &result, "counter should be 40");
 
-        /* Test going negative */
         old = atomic_fetch_add(&fetch_add_counter, -100);
         TEST_ASSERT_EQ(40, old, &result, "fetch_add(-100) should return 40");
         TEST_ASSERT_EQ(-60, fetch_add_counter, &result, "counter should be -60");
@@ -61,7 +59,6 @@ test_result_t test_fetch_add_100(int hart_id, int ncores)
     test_result_t result = { .name = "fetch_add_100", .passed = 0, .failed = 0 };
     const int ITERATIONS = 100;
 
-    /* Setup */
     if (hart_id == 0) {
         fetch_add_counter = 0;
         for (int i = 0; i < NCORES; i++) {
@@ -80,13 +77,11 @@ test_result_t test_fetch_add_100(int hart_id, int ncores)
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
-    /* Verify */
     if (hart_id == 0) {
         int expected = ncores * ITERATIONS;
         TEST_ASSERT_EQ(expected, fetch_add_counter, &result,
             "counter should equal ncores*100");
 
-        /* Verify that each old value was unique (sum of 0 to ncores*100-1) */
         int total_old_sum = 0;
         for (int i = 0; i < ncores; i++) {
             total_old_sum += fetch_add_results[i];
@@ -107,20 +102,17 @@ test_result_t test_fetch_add_1000(int hart_id, int ncores)
     test_result_t result = { .name = "fetch_add_1000", .passed = 0, .failed = 0 };
     const int ITERATIONS = 1000;
 
-    /* Setup */
     if (hart_id == 0) {
         fetch_add_counter = 0;
     }
     pg_barrier_at(BARRIER_TEST_SETUP, ncores);
 
-    /* Each core increments 1000 times */
     for (int i = 0; i < ITERATIONS; i++) {
         atomic_fetch_add(&fetch_add_counter, 1);
     }
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
-    /* Verify */
     if (hart_id == 0) {
         int expected = ncores * ITERATIONS;
         TEST_ASSERT_EQ(expected, fetch_add_counter, &result,
@@ -136,14 +128,12 @@ test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores)
     test_result_t result = { .name = "fetch_add_1000_random_nop", .passed = 0, .failed = 0 };
     const int ITERATIONS = 1000;
 
-    /* Setup */
     if (hart_id == 0) {
         fetch_add_counter = 0;
         srand(42);
     }
     pg_barrier_at(BARRIER_TEST_SETUP, ncores);
 
-    /* Each core increments 1000 times with random NOPs */
     for (int i = 0; i < ITERATIONS; i++) {
         atomic_fetch_add(&fetch_add_counter, 1);
 
@@ -155,7 +145,6 @@ test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores)
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
-    /* Verify */
     if (hart_id == 0) {
         int expected = ncores * ITERATIONS;
         TEST_ASSERT_EQ(expected, fetch_add_counter, &result,

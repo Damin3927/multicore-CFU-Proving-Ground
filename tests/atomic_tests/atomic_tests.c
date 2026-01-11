@@ -130,7 +130,6 @@ int main(void)
 
     pg_barrier();
 
-    /* Run all tests */
     for (int i = 0; i < (int)NUM_TESTS; i++) {
         run_test(all_tests[i].func, all_tests[i].suite_name, hart_id, NCORES);
     }

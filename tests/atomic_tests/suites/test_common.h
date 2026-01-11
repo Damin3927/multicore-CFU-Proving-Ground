@@ -54,7 +54,6 @@ enum TestBarriers {
     BARRIER_TEST_CLEANUP = 3,
 };
 
-/* Test declarations */
 test_result_t test_fetch_add_basic(int hart_id, int ncores);
 test_result_t test_fetch_add_negative(int hart_id, int ncores);
 test_result_t test_fetch_add_100(int hart_id, int ncores);
