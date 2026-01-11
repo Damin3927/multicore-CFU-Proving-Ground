@@ -127,8 +127,6 @@ clean:
 reset-hard: clean
 	rm -rf build build.tcl main.xdc
 
-# Code formatting with clang-format
-# Exclude patterns are read from .clang-format-ignore
 CLANG_FORMAT_EXCLUDE := $(shell [ -f .clang-format-ignore ] && grep -v '^\#' .clang-format-ignore | grep -v '^$$' | sed 's|^|! -path "./|; s|$$|/*"|' | tr '\n' ' ')
 
 format:

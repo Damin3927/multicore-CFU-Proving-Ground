@@ -6,7 +6,7 @@ static volatile int exchange_history[NCORES * 100];
 
 test_result_t test_exchange_basic(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "exchange_basic", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "exchange_basic", .passed = 0, .failed = 0};
 
     if (hart_id == 0) {
         exchange_var = 42;
@@ -30,7 +30,7 @@ test_result_t test_exchange_basic(int hart_id, int ncores)
 
 test_result_t test_exchange_concurrent(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "exchange_concurrent", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "exchange_concurrent", .passed = 0, .failed = 0};
 
     if (hart_id == 0) {
         exchange_var = 0;
@@ -67,12 +67,14 @@ test_result_t test_exchange_concurrent(int hart_id, int ncores)
         TEST_ASSERT(got_zero_idx != -1, &result, "one core should have received 0");
 
         int final_val = exchange_var;
-        TEST_ASSERT(final_val >= 1 && final_val <= ncores, &result, "final value should be a valid hart value");
+        TEST_ASSERT(final_val >= 1 && final_val <= ncores, &result,
+                    "final value should be a valid hart value");
 
         for (int i = 0; i < ncores; i++) {
             int value = i + 1;
             int expected_count = (value == final_val) ? 0 : 1;
-            TEST_ASSERT_EQ(expected_count, value_counts[i], &result, "each value should appear correct number of times");
+            TEST_ASSERT_EQ(expected_count, value_counts[i], &result,
+                           "each value should appear correct number of times");
         }
     }
 
@@ -82,7 +84,7 @@ test_result_t test_exchange_concurrent(int hart_id, int ncores)
 
 test_result_t test_exchange_concurrent_50(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "exchange_concurrent_50", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "exchange_concurrent_50", .passed = 0, .failed = 0};
     const int ROUNDS = 50;
 
     if (hart_id == 0) {
@@ -159,7 +161,8 @@ test_result_t test_exchange_concurrent_50(int hart_id, int ncores)
 
         TEST_ASSERT_EQ(expected_count, actual_count, &result, "value count mismatch");
         for (int i = 0; i < expected_count; i++) {
-            TEST_ASSERT_EQ(expected_written[i], actual_received[i], &result, "value sets must match exactly");
+            TEST_ASSERT_EQ(expected_written[i], actual_received[i], &result,
+                           "value sets must match exactly");
         }
     }
 

@@ -12,7 +12,7 @@ static volatile int critical_section_data;
 
 test_result_t test_mixed_atomic_ops(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "mixed_atomic_ops", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "mixed_atomic_ops", .passed = 0, .failed = 0};
     const int ITERATIONS = 50;
 
     if (hart_id == 0) {
@@ -36,12 +36,10 @@ test_result_t test_mixed_atomic_ops(int hart_id, int ncores)
 
     if (hart_id == 0) {
         int expected_adds = ((ITERATIONS + 2) / 3) * ncores;
-        TEST_ASSERT_EQ(expected_adds, mixed_counter1, &result,
-            "counter1 should be correct");
+        TEST_ASSERT_EQ(expected_adds, mixed_counter1, &result, "counter1 should be correct");
 
         int expected_counter2 = 1000 - expected_adds;
-        TEST_ASSERT_EQ(expected_counter2, mixed_counter2, &result,
-            "counter2 should be correct");
+        TEST_ASSERT_EQ(expected_counter2, mixed_counter2, &result, "counter2 should be correct");
 
         int valid_flag = (mixed_flag >= 0 && mixed_flag < ncores);
         TEST_ASSERT(valid_flag, &result, "flag should be valid hart_id");
@@ -53,7 +51,7 @@ test_result_t test_mixed_atomic_ops(int hart_id, int ncores)
 
 test_result_t test_producer_consumer(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "producer_consumer", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "producer_consumer", .passed = 0, .failed = 0};
     const int NUM_ITEMS = 80;
 
     if (hart_id == 0) {
@@ -93,8 +91,7 @@ test_result_t test_producer_consumer(int hart_id, int ncores)
 
     if (hart_id == 0) {
         int expected_sum = NUM_ITEMS * (NUM_ITEMS + 1) / 2;
-        TEST_ASSERT_EQ(expected_sum, consumer_sum, &result,
-            "consumer sum should be correct");
+        TEST_ASSERT_EQ(expected_sum, consumer_sum, &result, "consumer sum should be correct");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
@@ -103,7 +100,7 @@ test_result_t test_producer_consumer(int hart_id, int ncores)
 
 test_result_t test_spinlock(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "spinlock", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "spinlock", .passed = 0, .failed = 0};
     const int ITERATIONS = 100;
 
     if (hart_id == 0) {
@@ -128,7 +125,7 @@ test_result_t test_spinlock(int hart_id, int ncores)
     if (hart_id == 0) {
         int expected = ncores * ITERATIONS;
         TEST_ASSERT_EQ(expected, critical_section_data, &result,
-            "counter should equal ncores * ITERATIONS");
+                       "counter should equal ncores * ITERATIONS");
 
         TEST_ASSERT_EQ(0, lock_var, &result, "lock should be 0 after all releases");
     }
@@ -146,24 +143,22 @@ static int compare_and_swap(volatile int *ptr, int expected, int new_val)
 {
     int old_val, ret;
 
-    asm volatile (
-        "lr.w %[old], (%[ptr])\n"
-        "bne %[old], %[exp], 1f\n"        // If not expected, skip SC
-        "sc.w %[ret], %[new], (%[ptr])\n"
-        "j 2f\n"
-        "1: li %[ret], 1\n"               // Set ret=1 to indicate failure
-        "2:\n"
-        : [ret] "=&r" (ret), [old] "=&r" (old_val)
-        : [ptr] "r" (ptr), [exp] "r" (expected), [new] "r" (new_val)
-        : "memory"
-    );
+    asm volatile("lr.w %[old], (%[ptr])\n"
+                 "bne %[old], %[exp], 1f\n" // If not expected, skip SC
+                 "sc.w %[ret], %[new], (%[ptr])\n"
+                 "j 2f\n"
+                 "1: li %[ret], 1\n" // Set ret=1 to indicate failure
+                 "2:\n"
+                 : [ret] "=&r"(ret), [old] "=&r"(old_val)
+                 : [ptr] "r"(ptr), [exp] "r"(expected), [new] "r"(new_val)
+                 : "memory");
 
     return (ret == 0);
 }
 
 test_result_t test_cas_single(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "cas_single", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "cas_single", .passed = 0, .failed = 0};
 
     if (hart_id == 0) {
         cas_var = 0;
@@ -200,7 +195,7 @@ test_result_t test_cas_single(int hart_id, int ncores)
 
 test_result_t test_cas_retry(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "cas_retry", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "cas_retry", .passed = 0, .failed = 0};
     const int ITERATIONS = 50;
 
     if (hart_id == 0) {
@@ -229,21 +224,21 @@ test_result_t test_cas_retry(int hart_id, int ncores)
     if (hart_id == 0) {
         int expected_counter = ncores * ITERATIONS;
         TEST_ASSERT_EQ(expected_counter, cas_counter, &result,
-            "counter should equal ncores * ITERATIONS");
+                       "counter should equal ncores * ITERATIONS");
 
         int total_successes = 0;
         for (int i = 0; i < ncores; i++) {
             total_successes += cas_successes[i];
         }
         TEST_ASSERT_EQ(expected_counter, total_successes, &result,
-            "total successes should equal ncores * ITERATIONS");
+                       "total successes should equal ncores * ITERATIONS");
 
         int total_attempts = 0;
         for (int i = 0; i < ncores; i++) {
             total_attempts += cas_attempts[i];
         }
         TEST_ASSERT(total_attempts >= total_successes, &result,
-            "total attempts should be >= total successes");
+                    "total attempts should be >= total successes");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);

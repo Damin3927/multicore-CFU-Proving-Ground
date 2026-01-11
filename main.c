@@ -3,13 +3,13 @@
 #include "util.h"
 
 #ifndef NCORES
-#define NCORES 4       // number of cores
+#define NCORES 4 // number of cores
 #endif
 
 #define INIT_COUNTER 1
 #define ITERATIONS 100
 
-volatile int shared_counter = INIT_COUNTER;  // Shared counter
+volatile int shared_counter = INIT_COUNTER; // Shared counter
 
 int main()
 {

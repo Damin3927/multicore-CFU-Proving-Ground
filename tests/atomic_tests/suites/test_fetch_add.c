@@ -1,4 +1,5 @@
 #include "test_common.h"
+
 #include <stdlib.h>
 
 static volatile int fetch_add_counter;
@@ -7,7 +8,7 @@ static volatile int add_counter;
 
 test_result_t test_fetch_add_basic(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_basic", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "fetch_add_basic", .passed = 0, .failed = 0};
 
     if (hart_id == 0) {
         fetch_add_counter = 0;
@@ -32,7 +33,7 @@ test_result_t test_fetch_add_basic(int hart_id, int ncores)
 
 test_result_t test_fetch_add_negative(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_negative", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "fetch_add_negative", .passed = 0, .failed = 0};
 
     if (hart_id == 0) {
         fetch_add_counter = 100;
@@ -56,7 +57,7 @@ test_result_t test_fetch_add_negative(int hart_id, int ncores)
 
 test_result_t test_fetch_add_100(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_100", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "fetch_add_100", .passed = 0, .failed = 0};
     const int ITERATIONS = 100;
 
     if (hart_id == 0) {
@@ -79,8 +80,7 @@ test_result_t test_fetch_add_100(int hart_id, int ncores)
 
     if (hart_id == 0) {
         int expected = ncores * ITERATIONS;
-        TEST_ASSERT_EQ(expected, fetch_add_counter, &result,
-            "counter should equal ncores*100");
+        TEST_ASSERT_EQ(expected, fetch_add_counter, &result, "counter should equal ncores*100");
 
         int total_old_sum = 0;
         for (int i = 0; i < ncores; i++) {
@@ -90,7 +90,7 @@ test_result_t test_fetch_add_100(int hart_id, int ncores)
         int n = ncores * ITERATIONS;
         int expected_sum = n * (n - 1) / 2;
         TEST_ASSERT_EQ(expected_sum, total_old_sum, &result,
-            "sum of old values should be n*(n-1)/2");
+                       "sum of old values should be n*(n-1)/2");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
@@ -99,7 +99,7 @@ test_result_t test_fetch_add_100(int hart_id, int ncores)
 
 test_result_t test_fetch_add_1000(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_1000", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "fetch_add_1000", .passed = 0, .failed = 0};
     const int ITERATIONS = 1000;
 
     if (hart_id == 0) {
@@ -115,8 +115,7 @@ test_result_t test_fetch_add_1000(int hart_id, int ncores)
 
     if (hart_id == 0) {
         int expected = ncores * ITERATIONS;
-        TEST_ASSERT_EQ(expected, fetch_add_counter, &result,
-            "counter should equal ncores*1000");
+        TEST_ASSERT_EQ(expected, fetch_add_counter, &result, "counter should equal ncores*1000");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
@@ -125,7 +124,7 @@ test_result_t test_fetch_add_1000(int hart_id, int ncores)
 
 test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "fetch_add_1000_random_nop", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "fetch_add_1000_random_nop", .passed = 0, .failed = 0};
     const int ITERATIONS = 1000;
 
     if (hart_id == 0) {
@@ -139,7 +138,7 @@ test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores)
 
         int nop_count = rand() % 100; // Random NOPs between 0-99
         for (int j = 0; j < nop_count; j++) {
-            asm volatile ("nop");
+            asm volatile("nop");
         }
     }
 
@@ -148,7 +147,7 @@ test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores)
     if (hart_id == 0) {
         int expected = ncores * ITERATIONS;
         TEST_ASSERT_EQ(expected, fetch_add_counter, &result,
-            "counter should equal ncores*1000 with random NOPs");
+                       "counter should equal ncores*1000 with random NOPs");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);

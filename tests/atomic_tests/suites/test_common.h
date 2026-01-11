@@ -16,35 +16,37 @@ typedef struct {
 
 typedef test_result_t (*test_func_t)(int hart_id, int ncores);
 
-#define TEST_ASSERT(cond, result, msg) do { \
-    if (!(cond)) { \
-        if ((result)->failed == 0) { \
-            pg_prints("  FAIL: "); \
-            pg_prints(msg); \
-            pg_prints("\n"); \
-        } \
-        (result)->failed++; \
-    } else { \
-        (result)->passed++; \
-    } \
-} while(0)
+#define TEST_ASSERT(cond, result, msg)                                                             \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            if ((result)->failed == 0) {                                                           \
+                pg_prints("  FAIL: ");                                                             \
+                pg_prints(msg);                                                                    \
+                pg_prints("\n");                                                                   \
+            }                                                                                      \
+            (result)->failed++;                                                                    \
+        } else {                                                                                   \
+            (result)->passed++;                                                                    \
+        }                                                                                          \
+    } while (0)
 
-#define TEST_ASSERT_EQ(expected, actual, result, msg) do { \
-    if ((expected) != (actual)) { \
-        if ((result)->failed == 0) { \
-            pg_prints("  FAIL: "); \
-            pg_prints(msg); \
-            pg_prints(" expected="); \
-            pg_printd(expected); \
-            pg_prints(" actual="); \
-            pg_printd(actual); \
-            pg_prints("\n"); \
-        } \
-        (result)->failed++; \
-    } else { \
-        (result)->passed++; \
-    } \
-} while(0)
+#define TEST_ASSERT_EQ(expected, actual, result, msg)                                              \
+    do {                                                                                           \
+        if ((expected) != (actual)) {                                                              \
+            if ((result)->failed == 0) {                                                           \
+                pg_prints("  FAIL: ");                                                             \
+                pg_prints(msg);                                                                    \
+                pg_prints(" expected=");                                                           \
+                pg_printd(expected);                                                               \
+                pg_prints(" actual=");                                                             \
+                pg_printd(actual);                                                                 \
+                pg_prints("\n");                                                                   \
+            }                                                                                      \
+            (result)->failed++;                                                                    \
+        } else {                                                                                   \
+            (result)->passed++;                                                                    \
+        }                                                                                          \
+    } while (0)
 
 /* Barrier IDs for tests */
 enum TestBarriers {

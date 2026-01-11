@@ -7,7 +7,7 @@ static volatile int barrier_counter;
 
 test_result_t test_barrier_simple(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "barrier_simple", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "barrier_simple", .passed = 0, .failed = 0};
 
     if (hart_id == 0) {
         for (int i = 0; i < NCORES; i++) {
@@ -52,7 +52,7 @@ test_result_t test_barrier_simple(int hart_id, int ncores)
 
 test_result_t test_barrier_multiple(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "barrier_multiple", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "barrier_multiple", .passed = 0, .failed = 0};
     const int NUM_BARRIERS = 20;
 
     if (hart_id == 0) {
@@ -68,7 +68,7 @@ test_result_t test_barrier_multiple(int hart_id, int ncores)
         int expected = (i + 1) * ncores;
         if (hart_id == 0 && i == NUM_BARRIERS - 1) {
             TEST_ASSERT_EQ(expected, barrier_counter, &result,
-                "counter should be NUM_BARRIERS * ncores");
+                           "counter should be NUM_BARRIERS * ncores");
         }
     }
 
