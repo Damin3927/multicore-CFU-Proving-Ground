@@ -36,7 +36,7 @@ static inline void draw_point(int x, int y, int c)
 volatile int current_row = 1; // between 1 and Y_PIX
 
 #if VERIFY_RESULT
-volatile int[X_PIX][Y_PIX] current_draw_result;
+volatile char current_draw_result[X_PIX][Y_PIX];
 #endif
 
 void draw_pixel(int x, int y, int k)
