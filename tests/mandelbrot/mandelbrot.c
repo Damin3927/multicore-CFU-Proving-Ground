@@ -1,6 +1,3 @@
-/* CFU Proving Ground since 2025-02    Copyright(c) 2025 Archlab. Science Tokyo /
-/ Released under the MIT license https://opensource.org/licenses/mit           */
-
 #include "atomic.h"
 #include "perf.h"
 #include "st7789.h"
@@ -86,7 +83,7 @@ void mandelbrot(int row, float x_max, float y_max)
     }
 }
 
-int main()
+int main(void)
 {
     int hart_id = pg_hart_id();
 

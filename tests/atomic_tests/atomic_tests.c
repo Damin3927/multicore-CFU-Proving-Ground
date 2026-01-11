@@ -3,7 +3,7 @@
 #include "util.h"
 
 #ifndef NCORES
-#define NCORES 4
+#define NCORES 4 // number of cores
 #endif
 
 typedef struct {

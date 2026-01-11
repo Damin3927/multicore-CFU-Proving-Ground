@@ -1,6 +1,3 @@
-/* CFU Proving Ground since 2025-02    Copyright(c) 2025 Archlab. Science Tokyo /
-/ Released under the MIT license https://opensource.org/licenses/mit           */
-
 #include "atomic.h"
 #include "perf.h"
 #include "st7789.h"
@@ -10,7 +7,7 @@
 #include <stdlib.h>
 
 #ifndef NCORES
-#define NCORES 4
+#define NCORES 4 // number of cores
 #endif
 
 #define WIDTH 120
@@ -32,7 +29,6 @@ static inline void draw_point(int x, int y, int c)
 } // Avoid optimization
 #endif
 
-/*******************************************************************************/
 void initialize(volatile int grid[HEIGHT][WIDTH])
 {
     srand(7);
@@ -66,7 +62,7 @@ void initialize(volatile int grid[HEIGHT][WIDTH])
         grid[i + 60][90] = (rand() & 0xfffffff);
     }
 }
-/*******************************************************************************/
+
 void print_grid(volatile int grid[HEIGHT][WIDTH], int start_x, int end_x)
 {
     for (int i = 0; i < HEIGHT; i++) {
@@ -95,7 +91,6 @@ void print_grid_to_console(volatile int grid[HEIGHT][WIDTH])
     }
 }
 
-/*******************************************************************************/
 void count_neighbor(volatile int grid[HEIGHT][WIDTH], int row, int col, int *count, int *sum)
 {
     int liveNeighbors = 0;
@@ -116,7 +111,6 @@ void count_neighbor(volatile int grid[HEIGHT][WIDTH], int row, int col, int *cou
     *sum = NeighborSum;
 }
 
-/*******************************************************************************/
 void update_grid(volatile int cGrid[HEIGHT][WIDTH], volatile int nGrid[HEIGHT][WIDTH], int start_x,
                  int end_x)
 {
@@ -143,8 +137,7 @@ void update_grid(volatile int cGrid[HEIGHT][WIDTH], volatile int nGrid[HEIGHT][W
     }
 }
 
-/*******************************************************************************/
-volatile int grid[HEIGHT][WIDTH];  // grid
+volatile int grid[HEIGHT][WIDTH];  // current grid
 volatile int nGrid[HEIGHT][WIDTH]; // next grid
 
 enum Barriers {
@@ -223,7 +216,7 @@ int main_master(int start_x, int end_x)
     return 0;
 }
 
-int main()
+int main(void)
 {
     int hart_id = pg_hart_id();
 
@@ -238,4 +231,3 @@ int main()
     pg_barrier();
     return 0;
 }
-/*******************************************************************************/

@@ -9,7 +9,7 @@
 #define NCORES 4 // number of cores
 #endif
 
-#define M_PI 3.14159265358979323846 /* pi */
+#define M_PI 3.14159265358979323846 // pi
 
 #define SAMPLE_RATE 44100
 #define SIN_FREQ 440
@@ -165,7 +165,7 @@ unsigned long long end_measurement(int hart_id)
     return 0;
 }
 
-int main()
+int main(void)
 {
     int hart_id = pg_hart_id();
     if (hart_id == 0) {
