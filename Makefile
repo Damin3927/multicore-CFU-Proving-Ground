@@ -9,7 +9,7 @@ include config.mk
 #TARGET := cmod_a7
 TARGET := nexys_a7
 
-.PHONY: build prog run clean
+.PHONY: build prog run clean format format-check
 all: prog build
 
 build:
@@ -126,3 +126,20 @@ clean:
 
 reset-hard: clean
 	rm -rf build build.tcl main.xdc
+
+CLANG_FORMAT_EXCLUDE := $(shell [ -f .clang-format-ignore ] && grep -v '^\#' .clang-format-ignore | grep -v '^$$' | sed 's|^|! -path "./|; s|$$|/*"|' | tr '\n' ' ')
+
+format:
+	@echo "Formatting C/C++ files..."
+	@find . -type f \( -name "*.c" -o -name "*.h" \) \
+		$(CLANG_FORMAT_EXCLUDE) \
+		-exec clang-format -i {} +
+	@echo "Formatting complete."
+
+format-check:
+	@echo "Checking code formatting..."
+	@find . -type f \( -name "*.c" -o -name "*.h" \) \
+		$(CLANG_FORMAT_EXCLUDE) \
+		-exec clang-format --dry-run --Werror {} + && \
+		echo "All files are properly formatted." || \
+		(echo "Some files need formatting. Run 'make format' to fix."; exit 1)

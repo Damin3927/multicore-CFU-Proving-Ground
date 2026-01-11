@@ -1,13 +1,12 @@
 #include "test_common.h"
 
-/* Shared variables for tests */
 static volatile int exchange_var;
 static volatile int exchange_results[NCORES];
 static volatile int exchange_history[NCORES * 100];
 
 test_result_t test_exchange_basic(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "exchange_basic", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "exchange_basic", .passed = 0, .failed = 0};
 
     if (hart_id == 0) {
         exchange_var = 42;
@@ -31,9 +30,8 @@ test_result_t test_exchange_basic(int hart_id, int ncores)
 
 test_result_t test_exchange_concurrent(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "exchange_concurrent", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "exchange_concurrent", .passed = 0, .failed = 0};
 
-    /* Setup - initial value is 0 */
     if (hart_id == 0) {
         exchange_var = 0;
         for (int i = 0; i < NCORES; i++) {
@@ -42,44 +40,42 @@ test_result_t test_exchange_concurrent(int hart_id, int ncores)
     }
     pg_barrier_at(BARRIER_TEST_SETUP, ncores);
 
-    /* Each core exchanges its unique value (hart_id + 1) */
     int my_value = hart_id + 1;
     int old = atomic_exchange(&exchange_var, my_value);
     exchange_results[hart_id] = old;
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
-    /* Verify - one core got 0, others got a unique hart value */
     if (hart_id == 0) {
-        int got_zero = 0;
-        int value_counts[NCORES + 1];
-        for (int i = 0; i <= NCORES; i++) {
+        int got_zero_idx = -1;
+        int value_counts[NCORES];
+        for (int i = 0; i < NCORES; i++) {
             value_counts[i] = 0;
         }
 
         for (int i = 0; i < ncores; i++) {
             int val = exchange_results[i];
             if (val == 0) {
-                got_zero++;
+                got_zero_idx = i;
             } else if (val >= 1 && val <= ncores) {
-                value_counts[val]++;
+                value_counts[val - 1]++;
+            } else {
+                TEST_ASSERT(0, &result, "received value out of expected range");
             }
         }
 
-        TEST_ASSERT_EQ(1, got_zero, &result, "exactly one core should get 0");
+        TEST_ASSERT(got_zero_idx != -1, &result, "one core should have received 0");
 
-        /* Final value should be one of the hart values */
         int final_val = exchange_var;
         TEST_ASSERT(final_val >= 1 && final_val <= ncores, &result,
-            "final value should be a valid hart value");
+                    "final value should be a valid hart value");
 
-        /* Check for value consistency - all exchanged values form a valid sequence */
-        int total_values = got_zero;
-        for (int i = 1; i <= ncores; i++) {
-            total_values += value_counts[i];
+        for (int i = 0; i < ncores; i++) {
+            int value = i + 1;
+            int expected_count = (value == final_val) ? 0 : 1;
+            TEST_ASSERT_EQ(expected_count, value_counts[i], &result,
+                           "each value should appear correct number of times");
         }
-        TEST_ASSERT_EQ(ncores, total_values, &result,
-            "all returned values should be valid");
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
@@ -88,7 +84,7 @@ test_result_t test_exchange_concurrent(int hart_id, int ncores)
 
 test_result_t test_exchange_concurrent_50(int hart_id, int ncores)
 {
-    test_result_t result = { .name = "exchange_concurrent_50", .passed = 0, .failed = 0 };
+    test_result_t result = {.name = "exchange_concurrent_50", .passed = 0, .failed = 0};
     const int ROUNDS = 50;
 
     if (hart_id == 0) {
@@ -107,20 +103,67 @@ test_result_t test_exchange_concurrent_50(int hart_id, int ncores)
 
     pg_barrier_at(BARRIER_TEST_RUN, ncores);
 
-    /* Verify - check that exchange operations maintain data integrity */
     if (hart_id == 0) {
-        /* The final value should be one of the last round values */
         int final_val = exchange_var;
-        int valid_final = 0;
-        for (int i = 0; i < ncores; i++) {
-            if (final_val == i * 1000 + (ROUNDS - 1)) {
-                valid_final = 1;
-                break;
+
+        long long expected_sum = 1000;
+        for (int core = 0; core < ncores; core++) {
+            for (int round = 0; round < ROUNDS; round++) {
+                expected_sum += core * 1000 + round;
             }
         }
-        TEST_ASSERT(valid_final, &result, "final value should be from last round");
 
-        result.passed++; /* Basic completion check */
+        long long actual_sum = final_val;
+        for (int core = 0; core < ncores; core++) {
+            for (int round = 0; round < ROUNDS; round++) {
+                actual_sum += exchange_history[core * ROUNDS + round];
+            }
+        }
+
+        TEST_ASSERT_EQ(expected_sum, actual_sum, &result, "sum of all values must be conserved");
+
+        int expected_written[NCORES * ROUNDS + 1];
+        int expected_count = 0;
+        expected_written[expected_count++] = 1000;
+        for (int core = 0; core < ncores; core++) {
+            for (int round = 0; round < ROUNDS; round++) {
+                expected_written[expected_count++] = core * 1000 + round;
+            }
+        }
+
+        int actual_received[NCORES * ROUNDS + 1];
+        int actual_count = 0;
+        for (int core = 0; core < ncores; core++) {
+            for (int round = 0; round < ROUNDS; round++) {
+                actual_received[actual_count++] = exchange_history[core * ROUNDS + round];
+            }
+        }
+        actual_received[actual_count++] = final_val;
+
+        for (int i = 0; i < expected_count - 1; i++) {
+            for (int j = i + 1; j < expected_count; j++) {
+                if (expected_written[i] > expected_written[j]) {
+                    int tmp = expected_written[i];
+                    expected_written[i] = expected_written[j];
+                    expected_written[j] = tmp;
+                }
+            }
+        }
+        for (int i = 0; i < actual_count - 1; i++) {
+            for (int j = i + 1; j < actual_count; j++) {
+                if (actual_received[i] > actual_received[j]) {
+                    int tmp = actual_received[i];
+                    actual_received[i] = actual_received[j];
+                    actual_received[j] = tmp;
+                }
+            }
+        }
+
+        TEST_ASSERT_EQ(expected_count, actual_count, &result, "value count mismatch");
+        for (int i = 0; i < expected_count; i++) {
+            TEST_ASSERT_EQ(expected_written[i], actual_received[i], &result,
+                           "value sets must match exactly");
+        }
     }
 
     pg_barrier_at(BARRIER_TEST_VERIFY, ncores);

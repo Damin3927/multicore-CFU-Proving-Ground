@@ -1,9 +1,9 @@
 #include "atomic.h"
-#include "util.h"
 #include "suites/test_common.h"
+#include "util.h"
 
 #ifndef NCORES
-#define NCORES 4
+#define NCORES 4 // number of cores
 #endif
 
 typedef struct {
@@ -13,27 +13,27 @@ typedef struct {
 
 static const test_entry_t all_tests[] = {
     /* Fetch Add Tests */
-    { "fetch_add_basic", test_fetch_add_basic },
-    { "fetch_add_negative", test_fetch_add_negative },
-    { "fetch_add_100", test_fetch_add_100 },
-    { "fetch_add_1000", test_fetch_add_1000 },
-    { "fetch_add_1000_with_random_nop", test_fetch_add_1000_random_nop },
+    {"fetch_add_basic", test_fetch_add_basic},
+    {"fetch_add_negative", test_fetch_add_negative},
+    {"fetch_add_100", test_fetch_add_100},
+    {"fetch_add_1000", test_fetch_add_1000},
+    {"fetch_add_1000_with_random_nop", test_fetch_add_1000_random_nop},
 
     /* Exchange Tests */
-    { "exchange_basic", test_exchange_basic },
-    { "exchange_concurrent", test_exchange_concurrent },
-    { "exchange_concurrent_50", test_exchange_concurrent_50 },
+    {"exchange_basic", test_exchange_basic},
+    {"exchange_concurrent", test_exchange_concurrent},
+    {"exchange_concurrent_50", test_exchange_concurrent_50},
 
     /* Barrier Tests */
-    { "barrier_simple", test_barrier_simple },
-    { "barrier_multiple", test_barrier_multiple },
+    {"barrier_simple", test_barrier_simple},
+    {"barrier_multiple", test_barrier_multiple},
 
     /* Other Tests */
-    { "mixed_atomic_ops", test_mixed_atomic_ops },
-    { "producer_consumer", test_producer_consumer },
-    { "spinlock_basic", test_spinlock },
-    { "cas_single", test_cas_single },
-    { "cas_retry", test_cas_retry },
+    {"mixed_atomic_ops", test_mixed_atomic_ops},
+    {"producer_consumer", test_producer_consumer},
+    {"spinlock_basic", test_spinlock},
+    {"cas_single", test_cas_single},
+    {"cas_retry", test_cas_retry},
 };
 
 #define NUM_TESTS (sizeof(all_tests) / sizeof(all_tests[0]))
@@ -130,8 +130,7 @@ int main(void)
 
     pg_barrier();
 
-    /* Run all tests */
-    for (int i = 0; i < (int)NUM_TESTS; i++) {
+    for (int i = 0; i < (int) NUM_TESTS; i++) {
         run_test(all_tests[i].func, all_tests[i].suite_name, hart_id, NCORES);
     }
 

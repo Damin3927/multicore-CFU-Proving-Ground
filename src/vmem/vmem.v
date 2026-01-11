@@ -13,7 +13,7 @@ module vmem #(
     output wire             [2:0] rdata_o
 );
 
-    reg [2:0] vmem[0:VMEM_ENTRIES-1];
+    (* ram_style = "block" *) reg [2:0] vmem[0:VMEM_ENTRIES-1];
     integer i;
     initial begin
         for (i = 0; i < VMEM_ENTRIES; i = i + 1) begin

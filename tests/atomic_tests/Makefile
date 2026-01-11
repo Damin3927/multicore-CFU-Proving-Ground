@@ -13,7 +13,7 @@ include $(CFUPG_ROOT)/config.mk
 $(info c_srcs: $(c_srcs))
 
 .PHONY: build
-build:
+build: prog
 	$(MAKE) -C $(CFUPG_ROOT) build
 
 .PHONY: clean
