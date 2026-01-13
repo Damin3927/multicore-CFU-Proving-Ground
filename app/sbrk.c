@@ -2,6 +2,7 @@
 / Released under the MIT license https://opensource.org/licenses/mit           */
 
 #include "sbrk.h"
+
 #include "atomic.h"
 #include "util.h"
 
@@ -27,13 +28,13 @@ void *_sbrk(int incr)
     if (heap_ptr + incr > &_heap_end) {
         // Out of memory
         spinlock_release(&sbrk_lock);
-        return (void *)-1;
+        return (void *) -1;
     }
 
     if (heap_ptr + incr < &_heap_start) {
         // Cannot shrink below start of heap
         spinlock_release(&sbrk_lock);
-        return (void *)-1;
+        return (void *) -1;
     }
 
     heap_ptr += incr;
