@@ -13,7 +13,7 @@
 #define WIDTH 120
 #define HEIGHT 120
 
-#define STEPS 5 // small data set for test and debug
+#define STEPS 100 // small data set for test and debug
 
 #define USE_LCD 0
 
