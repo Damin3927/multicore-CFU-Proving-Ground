@@ -4,8 +4,8 @@
 OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
-_stack_size_per_core = 2K;
-_total_stack_size = _stack_size_per_core * _num_cores;
+PROVIDE(_stack_size = 2K);
+_stack_base = 0x18000000;
 PROVIDE(IMEM_SIZE = 0x00020000);
 PROVIDE(DMEM_SIZE = 0x00020000);
 
@@ -45,7 +45,7 @@ SECTIONS
     .heap : {
         . = ALIGN(16);
         _heap_start = .;
-        . = ORIGIN(dmem) + LENGTH(dmem) - _total_stack_size;
+        . = ORIGIN(dmem) + LENGTH(dmem);
         _heap_end = .;
     } > dmem
 
@@ -55,6 +55,6 @@ SECTIONS
 }
 
 PROVIDE(_tohost = 0x80000000);
-PROVIDE(_fstack = ORIGIN(dmem) + LENGTH(dmem));
+PROVIDE(_fstack = _stack_base + _stack_size);
 PROVIDE(__heap_start = _heap_start);
 PROVIDE(__heap_end = _heap_end);
