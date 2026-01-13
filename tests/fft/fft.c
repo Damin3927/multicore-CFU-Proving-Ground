@@ -1,27 +1,28 @@
-#include <math.h>
 #include "atomic.h"
+#include "perf.h"
 #include "st7789.h"
 #include "util.h"
-#include "perf.h"
+
+#include <math.h>
 
 #ifndef NCORES
-#define NCORES 4       // number of cores
+#define NCORES 4 // number of cores
 #endif
 
-#define M_PI		3.14159265358979323846	/* pi */
+#define M_PI 3.14159265358979323846 // pi
 
 #define SAMPLE_RATE 44100
 #define SIN_FREQ 440
 
-#define FFT_POINT   1024
+#define FFT_POINT 1024
 #define FFT_POINT_2 512
-#define FFT_STAGES  10
+#define FFT_STAGES 10
 
-static float W_N[2*FFT_POINT];
-static float f[2*FFT_POINT];
+static float W_N[2 * FFT_POINT];
+static float f[2 * FFT_POINT];
 
 #define VERIFY_RESULTS 1
-static float f_verif[2*FFT_POINT];
+static float f_verif[2 * FFT_POINT];
 
 enum Barriers {
     FFT,
@@ -61,24 +62,25 @@ void fft(float *f, int hart_id, int ncores)
 
             int cnt_twiddle = cnt_butterflies_start * (FFT_POINT_2 >> cnt_stages);
 
-            for (int cnt_butterflies = cnt_butterflies_start; cnt_butterflies < cnt_butterflies_end; ++cnt_butterflies) {
+            for (int cnt_butterflies = cnt_butterflies_start; cnt_butterflies < cnt_butterflies_end;
+                 ++cnt_butterflies) {
                 int idx_upper = idx_blocks + cnt_butterflies;
                 int idx_lower = idx_upper + butterflies_offset;
 
-                float temp_var1 = f[(idx_lower<<1)]   * W_N[(cnt_twiddle<<1)]  ;
-                float temp_var2 = f[(idx_lower<<1)+1] * W_N[(cnt_twiddle<<1)+1];
-                float temp_var3 = f[(idx_lower<<1)]   * W_N[(cnt_twiddle<<1)+1];
-                float temp_var4 = f[(idx_lower<<1)+1] * W_N[(cnt_twiddle<<1)]  ;
+                float temp_var1 = f[(idx_lower << 1)] * W_N[(cnt_twiddle << 1)];
+                float temp_var2 = f[(idx_lower << 1) + 1] * W_N[(cnt_twiddle << 1) + 1];
+                float temp_var3 = f[(idx_lower << 1)] * W_N[(cnt_twiddle << 1) + 1];
+                float temp_var4 = f[(idx_lower << 1) + 1] * W_N[(cnt_twiddle << 1)];
                 float temp_var1_2 = temp_var1 - temp_var2;
                 float temp_var3_4 = temp_var3 + temp_var4;
 
-                float real = f[(idx_upper<<1)];
-                float imag = f[(idx_upper<<1)+1];
+                float real = f[(idx_upper << 1)];
+                float imag = f[(idx_upper << 1) + 1];
 
-                f[(idx_upper<<1)]   = real + temp_var1_2;
-                f[(idx_upper<<1)+1] = imag + temp_var3_4;
-                f[(idx_lower<<1)]   = real - temp_var1_2;
-                f[(idx_lower<<1)+1] = imag - temp_var3_4;
+                f[(idx_upper << 1)] = real + temp_var1_2;
+                f[(idx_upper << 1) + 1] = imag + temp_var3_4;
+                f[(idx_lower << 1)] = real - temp_var1_2;
+                f[(idx_lower << 1) + 1] = imag - temp_var3_4;
 
                 cnt_twiddle += (FFT_POINT_2 >> cnt_stages);
             }
@@ -96,24 +98,24 @@ void init_W_N(int hart_id, int ncores)
     int i_start = (FFT_POINT / ncores) * hart_id;
     int i_end = i_start + (FFT_POINT / ncores);
     for (int i = i_start; i < i_end; i++) {
-        W_N[(i<<1)]   = cosf(-2.0 * M_PI * i / FFT_POINT);
-        W_N[(i<<1)+1] = sinf(-2.0 * M_PI * i / FFT_POINT);
+        W_N[(i << 1)] = cosf(-2.0 * M_PI * i / FFT_POINT);
+        W_N[(i << 1) + 1] = sinf(-2.0 * M_PI * i / FFT_POINT);
     }
 }
 
-void init_f(float* f, int hart_id, int ncores)
+void init_f(float *f, int hart_id, int ncores)
 {
     float t;
     int i_start = (FFT_POINT / ncores) * hart_id;
     int i_end = i_start + (FFT_POINT / ncores);
     for (int i = i_start; i < i_end; i++) {
         t = 1.0 * i / SAMPLE_RATE;
-        f[(i<<1)] = sinf(2.0 * M_PI * SIN_FREQ * t);
-        f[(i<<1)+1] = 0;
+        f[(i << 1)] = sinf(2.0 * M_PI * SIN_FREQ * t);
+        f[(i << 1) + 1] = 0;
     }
 }
 
-void do_bit_reversal(float* f, int hart_id, int ncores)
+void do_bit_reversal(float *f, int hart_id, int ncores)
 {
     int i_start = (FFT_POINT / ncores) * hart_id;
     int i_end = i_start + (FFT_POINT / ncores);
@@ -127,13 +129,13 @@ void do_bit_reversal(float* f, int hart_id, int ncores)
         j >>= (16 - FFT_STAGES);
 
         if (i < j) {
-            tmp = f[i<<1];
-            f[i<<1] = f[j<<1];
-            f[j<<1] = tmp;
+            tmp = f[i << 1];
+            f[i << 1] = f[j << 1];
+            f[j << 1] = tmp;
 
-            tmp = f[(i<<1)+1];
-            f[(i<<1)+1] = f[(j<<1)+1];
-            f[(j<<1)+1] = tmp;
+            tmp = f[(i << 1) + 1];
+            f[(i << 1) + 1] = f[(j << 1) + 1];
+            f[(j << 1) + 1] = tmp;
         }
     }
 }
@@ -163,7 +165,7 @@ unsigned long long end_measurement(int hart_id)
     return 0;
 }
 
-int main ()
+int main(void)
 {
     int hart_id = pg_hart_id();
     if (hart_id == 0) {
@@ -206,7 +208,7 @@ int main ()
             // verify results
             pg_prints("Verifying results...\n");
             int errors = 0;
-            for (int i = 0; i < 2*FFT_POINT; i++) {
+            for (int i = 0; i < 2 * FFT_POINT; i++) {
                 if (f[i] != f_verif[i]) {
                     errors++;
                 }

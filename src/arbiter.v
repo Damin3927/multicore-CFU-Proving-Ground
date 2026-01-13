@@ -7,10 +7,10 @@ module single_issue_arbiter #(
     parameter NCORES = `NCORES,
     parameter ADDR_WIDTH = 32
 ) (
-    input wire [$clog2(NCORES)-1:0] rr_ptr_i,
+    input wire [NCORES == 1 ? 0 : $clog2(NCORES)-1:0] rr_ptr_i,
     input wire         [NCORES-1:0] req_valid_i,
     output reg                      valid_o,
-    output reg [$clog2(NCORES)-1:0] selector_o
+    output reg [NCORES == 1 ? 0 : $clog2(NCORES)-1:0] selector_o
 );
     generate
         if (NCORES == 2) begin : gen_ncores_2 // Simpler impl
@@ -35,7 +35,7 @@ module single_issue_arbiter #(
             always @(*) begin
                 selector_o = 0;
                 for (j = 0; j < NCORES; j = j + 1) begin
-                    if (gnt_onehot[j]) selector_o = j[$clog2(NCORES)-1:0];
+                    if (gnt_onehot[j]) selector_o = j[NCORES == 1 ? 0 : $clog2(NCORES)-1:0];
                 end
 
                 valid_o = |gnt_onehot;
