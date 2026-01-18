@@ -65,7 +65,7 @@ module main #(
     wire [VMEM_WDATAW-1:0] vmem_wdata [0:NCORES-1];
     wire                   vmem_stall[0:NCORES-1];
 
-    // Pack arrays for dbus_dmem module
+    // Pack arrays for dmem_controller module
     wire [NCORES-1:0] dmem_re_packed;
     wire [NCORES-1:0] dmem_we_packed;
     wire [DMEM_ADDRW*NCORES-1:0] dmem_addr_packed;
@@ -76,7 +76,7 @@ module main #(
     wire [32*NCORES-1:0] dmem_rdata_packed;
     wire [NCORES-1:0] dmem_stall_packed;
 
-    // Pack arrays for dbus_vmem module
+    // Pack arrays for vmem_controller module
     wire [NCORES-1:0] vmem_we_packed;
     wire [VMEM_ADDRW*NCORES-1:0] vmem_addr_packed;
     wire [VMEM_WDATAW*NCORES-1:0] vmem_wdata_packed;
@@ -203,20 +203,10 @@ module main #(
     endgenerate
 
 `ifdef USE_COMB_DBUS
-    comb_dbus_dmem comb_dbus_dmem (
-        .clk_i         (clk),                // input  wire
-        .re_packed_i   (dmem_re_packed),     // input  wire [NCORES-1:0]
-        .we_packed_i   (dmem_we_packed),     // input  wire [NCORES-1:0]
-        .addr_packed_i (dmem_addr_packed),   // input  wire [32*NCORES-1:0]
-        .wdata_packed_i(dmem_wdata_packed),  // input  wire [32*NCORES-1:0]
-        .wstrb_packed_i(dmem_wstrb_packed),  // input  wire [4*NCORES-1:0]
-        .is_lr_packed_i(dmem_is_lr_packed),  // input  wire [NCORES-1:0]
-        .is_sc_packed_i(dmem_is_sc_packed),  // input  wire [NCORES-1:0]
-        .rdata_packed_o(dmem_rdata_packed),  // output wire [32*NCORES-1:0]
-        .stall_packed_o(dmem_stall_packed)   // output wire [NCORES-1:0]
-    );
+    comb_dmem_controller comb_dmem_controller (
 `else
-    dbus_dmem dbus_dmem (
+    dmem_controller dmem_controller (
+`endif
         .clk_i         (clk),                // input  wire
         .re_packed_i   (dmem_re_packed),     // input  wire [NCORES-1:0]
         .we_packed_i   (dmem_we_packed),     // input  wire [NCORES-1:0]
@@ -228,13 +218,12 @@ module main #(
         .rdata_packed_o(dmem_rdata_packed),  // output wire [32*NCORES-1:0]
         .stall_packed_o(dmem_stall_packed)   // output wire [NCORES-1:0]
     );
-`endif
 
     wire [VMEM_ADDRW-1:0]  vmem_disp_raddr;
     wire [VMEM_WDATAW-1:0] vmem_disp_rdata_t;
     wire [VMEM_ADDRW-1:0]  vmem_disp_rdata = {{5{vmem_disp_rdata_t[2]}}, {6{vmem_disp_rdata_t[1]}}, {5{vmem_disp_rdata_t[0]}}};
 
-    dbus_vmem dbus_vmem (
+    vmem_controller vmem_controller (
         .clk_i          (clk),                // input  wire
         .we_packed_i    (vmem_we_packed),     // input  wire [NCORES-1:0]
         .addr_packed_i  (vmem_addr_packed),   // input  wire [VMEM_ADDRW*NCORES-1:0]

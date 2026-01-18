@@ -1,7 +1,7 @@
 `resetall
 `default_nettype none
 
-module dbus_dmem #(
+module dmem_controller #(
     parameter NCORES = `NCORES,
     parameter DMEM_ADDRW = `DMEM_ADDRW
 ) (

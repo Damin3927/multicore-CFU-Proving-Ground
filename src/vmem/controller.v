@@ -3,7 +3,7 @@
 
 `include "config.vh"
 
-module dbus_vmem #(
+module vmem_controller #(
     parameter NCORES = `NCORES,
     parameter VMEM_ADDRW = `VMEM_ADDRW,
     parameter VMEM_WDATAW = 3
