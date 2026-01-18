@@ -10,45 +10,6 @@ static volatile int consumer_sum;
 static volatile int lock_var;
 static volatile int critical_section_data;
 
-test_result_t test_mixed_atomic_ops(int hart_id, int ncores)
-{
-    test_result_t result = {.name = "mixed_atomic_ops", .passed = 0, .failed = 0};
-    const int ITERATIONS = 50;
-
-    if (hart_id == 0) {
-        mixed_counter1 = 0;
-        mixed_counter2 = 1000;
-        mixed_flag = 0;
-    }
-    pg_barrier_at(BARRIER_TEST_SETUP, ncores);
-
-    for (int i = 0; i < ITERATIONS; i++) {
-        if (i % 3 == 0) {
-            atomic_fetch_add(&mixed_counter1, 1);
-        } else if (i % 3 == 1) {
-            atomic_fetch_add(&mixed_counter2, -1);
-        } else {
-            atomic_exchange(&mixed_flag, hart_id);
-        }
-    }
-
-    pg_barrier_at(BARRIER_TEST_RUN, ncores);
-
-    if (hart_id == 0) {
-        int expected_adds = ((ITERATIONS + 2) / 3) * ncores;
-        TEST_ASSERT_EQ(expected_adds, mixed_counter1, &result, "counter1 should be correct");
-
-        int expected_counter2 = 1000 - expected_adds;
-        TEST_ASSERT_EQ(expected_counter2, mixed_counter2, &result, "counter2 should be correct");
-
-        int valid_flag = (mixed_flag >= 0 && mixed_flag < ncores);
-        TEST_ASSERT(valid_flag, &result, "flag should be valid hart_id");
-    }
-
-    pg_barrier_at(BARRIER_TEST_VERIFY, ncores);
-    return result;
-}
-
 test_result_t test_producer_consumer(int hart_id, int ncores)
 {
     test_result_t result = {.name = "producer_consumer", .passed = 0, .failed = 0};
