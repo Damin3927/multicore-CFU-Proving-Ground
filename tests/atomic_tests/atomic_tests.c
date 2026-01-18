@@ -12,11 +12,16 @@ typedef struct {
 } test_entry_t;
 
 static const test_entry_t all_tests[] = {
+    /* LR/SC Specific Tests */
+    {"sc_fail_on_intervene", test_sc_fail_on_intervene},
+    {"sc_different_address", test_sc_different_address},
+    {"reservation_overwrite", test_reservation_overwrite},
+    {"sc_without_lr", test_sc_without_lr},
+    {"lr_sc_aqrl_variants", test_lr_sc_aqrl_variants},
+
     /* Fetch Add Tests */
     {"fetch_add_basic", test_fetch_add_basic},
-    {"fetch_add_negative", test_fetch_add_negative},
-    {"fetch_add_100", test_fetch_add_100},
-    {"fetch_add_1000", test_fetch_add_1000},
+    {"fetch_add_100000", test_fetch_add_100000},
     {"fetch_add_1000_with_random_nop", test_fetch_add_1000_random_nop},
 
     /* Exchange Tests */
@@ -25,11 +30,11 @@ static const test_entry_t all_tests[] = {
     {"exchange_concurrent_50", test_exchange_concurrent_50},
 
     /* Barrier Tests */
-    {"barrier_simple", test_barrier_simple},
-    {"barrier_multiple", test_barrier_multiple},
+    {"barrier_atomic_counter", test_barrier_atomic_counter},
+    {"barrier_delay_injection", test_barrier_delay_injection},
+    {"barrier_continuous", test_barrier_continuous},
 
     /* Other Tests */
-    {"mixed_atomic_ops", test_mixed_atomic_ops},
     {"producer_consumer", test_producer_consumer},
     {"spinlock_basic", test_spinlock},
     {"cas_single", test_cas_single},
