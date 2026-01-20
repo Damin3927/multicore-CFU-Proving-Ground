@@ -149,8 +149,6 @@ module dmem_controller #(
     reg ret_is_sc_a_d;
     reg ret_is_sc_b_d;
 
-    reg [$clog2(NCORES)-1:0] rr_ptr_d;
-
     // Select cores in round-robin fashion
     wire [NCORES_A-1:0] req_valid_a_packed;
     wire [NCORES_B-1:0] req_valid_b_packed;
@@ -219,8 +217,8 @@ module dmem_controller #(
         reb_int         = 1'b0;
         wea_int         = 1'b0;
         web_int         = 1'b0;
-        addra_int       = 32'h0;
-        addrb_int       = 32'h0;
+        addra_int       = {DMEM_ADDRW{1'b0}};
+        addrb_int       = {DMEM_ADDRW{1'b0}};
         wdataa_int      = 32'h0;
         wdatab_int      = 32'h0;
         wstrba_int      = 4'h0;
