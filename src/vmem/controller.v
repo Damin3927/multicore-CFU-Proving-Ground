@@ -3,7 +3,7 @@
 
 `include "config.vh"
 
-module dbus_vmem #(
+module vmem_controller #(
     parameter NCORES = `NCORES,
     parameter VMEM_ADDRW = `VMEM_ADDRW,
     parameter VMEM_WDATAW = 3
@@ -29,11 +29,11 @@ module dbus_vmem #(
     reg [$clog2(STATE_WIDTH)-1:0] state_d;
 
     // Unpack input arrays
-    wire                  we   [0:NCORES-1];
-    wire [VMEM_ADDRW-1:0] addr [0:NCORES-1];
-    wire [31:0]           wdata[0:NCORES-1];
-    reg                   stall_q [0:NCORES-1];
-    reg                   stall_d [0:NCORES-1];
+    wire                   we   [0:NCORES-1];
+    wire [VMEM_ADDRW-1:0]  addr [0:NCORES-1];
+    wire [VMEM_WDATAW-1:0] wdata[0:NCORES-1];
+    reg                    stall_q [0:NCORES-1];
+    reg                    stall_d [0:NCORES-1];
 
     generate
         for (i = 0; i < NCORES; i = i + 1) begin : unpack_arrays
@@ -127,12 +127,11 @@ module dbus_vmem #(
                 end
             end
             ACCESS: begin
-                state_d    = IDLE;
-                we_int     = 1'b1;
-                addr_int   = sel_addr_q[VMEM_ADDRW-1:0];
-                wdata_int  = req_wdata_q[sel_core_q];
-
-                rr_ptr_d = (sel_core_q + 1) % NCORES;
+                state_d   = IDLE;
+                we_int    = 1'b1;
+                addr_int  = sel_addr_q;
+                wdata_int = req_wdata_q[sel_core_q];
+                rr_ptr_d  = (sel_core_q + 1) % NCORES;
             end
             default: begin
                 state_d = IDLE;

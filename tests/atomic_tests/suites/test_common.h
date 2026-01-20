@@ -56,20 +56,24 @@ enum TestBarriers {
     BARRIER_TEST_CLEANUP = 3,
 };
 
+test_result_t test_sc_fail_on_intervene(int hart_id, int ncores);
+test_result_t test_sc_different_address(int hart_id, int ncores);
+test_result_t test_reservation_overwrite(int hart_id, int ncores);
+test_result_t test_sc_without_lr(int hart_id, int ncores);
+test_result_t test_lr_sc_aqrl_variants(int hart_id, int ncores);
+
 test_result_t test_fetch_add_basic(int hart_id, int ncores);
-test_result_t test_fetch_add_negative(int hart_id, int ncores);
-test_result_t test_fetch_add_100(int hart_id, int ncores);
-test_result_t test_fetch_add_1000(int hart_id, int ncores);
+test_result_t test_fetch_add_100000(int hart_id, int ncores);
 test_result_t test_fetch_add_1000_random_nop(int hart_id, int ncores);
 
 test_result_t test_exchange_basic(int hart_id, int ncores);
 test_result_t test_exchange_concurrent(int hart_id, int ncores);
 test_result_t test_exchange_concurrent_50(int hart_id, int ncores);
 
-test_result_t test_barrier_simple(int hart_id, int ncores);
-test_result_t test_barrier_multiple(int hart_id, int ncores);
+test_result_t test_barrier_atomic_counter(int hart_id, int ncores);
+test_result_t test_barrier_delay_injection(int hart_id, int ncores);
+test_result_t test_barrier_continuous(int hart_id, int ncores);
 
-test_result_t test_mixed_atomic_ops(int hart_id, int ncores);
 test_result_t test_producer_consumer(int hart_id, int ncores);
 test_result_t test_spinlock(int hart_id, int ncores);
 test_result_t test_cas_single(int hart_id, int ncores);
