@@ -1,6 +1,5 @@
-# CFU Proving Ground
-CFU Proving Ground is a hardware-software co-design environment for FPGAs based on the RISC-V architecture.
-This enables agile development of ASIPs (Application-Specific Integrated Products) through a soft processor supporting the RV32IM instruction set, an RTL-based design flow, and a CFU (Custom Function Unit), which is a resource-efficient ALU-based accelerator.
+# CFU-MC
+CFU-MC (CFU Multicore) is a FPGA-based multicore SoC on the RISC-V architecture, originated from "CFU Proving Ground", a singlecore SoC with a Custom Function Unit (CFU).
 
 For information on how to create and use Custom Function Units (CFUs), please see [CFU Implementation Guide](cfu.md).
 
@@ -39,10 +38,10 @@ $ make
 
 Please clone this repository with the following command.
 ```
-$ git clone https://github.com/archlab-sciencetokyo/CFU-Proving-Ground
+$ git clone https://github.com/Damin3927/CFU-MC
 ```
 
-Open and edit the `Makefile` on the CFU-Proving-Ground directory to specify proper absolute paths.
+Open and edit the `Makefile` on the CFU-MC directory to specify proper absolute paths.
 
 If you are using [ACRi Room](https://gw.acri.c.titech.ac.jp/wp/), these paths are already set correctly and you do not need to change them.
 
@@ -59,7 +58,7 @@ If you are using [ACRi Room](https://gw.acri.c.titech.ac.jp/wp/), these paths ar
 This project uses Verilator and a custom display emulator.
 The following command is used to compile the project.
 ```
-$ cd CFU-Proving-Ground
+$ cd CFU-MC
 $ make
 ```
 
@@ -79,8 +78,8 @@ Memory initialization files `memi.txt` and `memd.txt` are compiled from `main.c`
 $ make prog
 ```
 
-The default FPGA board is Arty A7.
-If you want to use Nexys A7, modify `Makefile` to use `TARGET=nexys_a7`.
+The default FPGA board is Nexys A7.
+If you want to use Arty A7, modify `Makefile` to use `TARGET=arty_a7`.
 If you want to use Cmod A7, modify `Makefile` to use `TARGET=cmod_a7`.
 
 Copy the proper `main.xdc` and `build.tcl` using the following command.
@@ -109,7 +108,7 @@ When the FPGA is configured, an application displays many random characters, sim
 ## Memory Map
 The default memory map is shown below.
 The sizes of instruction memory and data memory can be changed in `config.vh`.
-If you change the size of the data memory, please appropriately modify the LENGTH of dmem in `app/link.ld`.
+If you change the size of the data memory, please appropriately provide the environment variables defined in `config.mk`. (e.g. `DMEM_SIZE_KB`)
 
 | addr   |  description                     |
 | -----------| -----------------------------|
@@ -127,33 +126,3 @@ When using the Vivado Hardware Server, you can use `scripts/prog_dev.tcl`.
 
 In `scripts/prog_dev.tcl`, please specify the IP ADDRESS and PORT number of the host where the Vivado Hardware Server is running.
 Once the specification is complete, you can write the bitstream to the board with `make conf`.
-
-## How to Modify Memory Size?
-To change the memory size, you must modify the configuration on both the hardware and software sides.
-
-### Hardware Side
-On the hardware side, you can change the memory size by modifying the `config.vh` file.
-The unit is in bytes.
-For example, if you want to use 64KiB of DMEM (Data Memory), you would set: `` `define DMEM_SIZE (64*1024) ``
-
-```verilog
-// ram
-`define IMEM_SIZE (32*1024) // instruction memory size in byte
-`define DMEM_SIZE (16*1024) // data memory size in byte
-```
-
-### Software Side
-The compiler is unaware of the amount of memory the hardware provides. The user must specify this configuration using the linker script (`app/link.ld`).
-
-Specifically, you need to change the `LENGTH` value in the `MEMORY` section of `app/link.ld`.
-
-For example, if the hardware has 64KiB of DMEM, you would set the `LENGTH` to `0x00010000` (which is 65,536, or 64 * 1024): `dmem : ORIGIN = 0x10000000, LENGTH = 0x00010000`
-```
-MEMORY {
-    imem : ORIGIN = 0x00000000, LENGTH = 0x00008000
-    dmem : ORIGIN = 0x10000000, LENGTH = 0x00004000
-}
-```
-> [!NOTE]
-> Even if FPGA board has sufficient Block RAM, you might be unable to generate a bitstream in Vivado when you increase the size of the `dmem`.
-> This is likely because the `dmem` description does not adhere to the Vivado User Guide.
