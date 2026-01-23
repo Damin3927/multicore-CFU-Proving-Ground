@@ -12,7 +12,7 @@
 
 // cpu
 `ifndef CLK_FREQ_MHZ
-`define CLK_FREQ_MHZ 140  // operating clock frequency in MHz
+`define CLK_FREQ_MHZ 135  // operating clock frequency in MHz
 `endif
 
 `define RESET_VECTOR 'h00000000
@@ -31,17 +31,22 @@
 `define IMEM_SIZE (128*1024) // instruction memory size in byte
 `endif
 `ifndef DMEM_SIZE
-`define DMEM_SIZE (128*1024) // data memory size in byte
+`define DMEM_SIZE (120*1024) // data memory size in byte
 `endif
 `define VMEM_SIZE (64*1024) // video memory size in byte
+`ifndef STACK_SIZE
+`define STACK_SIZE (2*1024) // stack size per core in byte
+`endif
 
 `define IMEM_ENTRIES (`IMEM_SIZE/4)
 `define DMEM_ENTRIES (`DMEM_SIZE/4)
 `define VMEM_ENTRIES `VMEM_SIZE
+`define STACK_ENTRIES (`STACK_SIZE/4)
 
 `define IMEM_ADDRW ($clog2(`IMEM_ENTRIES))
 `define DMEM_ADDRW ($clog2(`DMEM_ENTRIES))
 `define VMEM_ADDRW ($clog2(`VMEM_ENTRIES))
+`define STACK_ADDRW ($clog2(`STACK_ENTRIES))
 
 // uart
 `ifndef BAUD_RATE

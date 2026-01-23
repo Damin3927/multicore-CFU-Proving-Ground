@@ -9,13 +9,16 @@ RTLSIM  := /tools/cad/bin/verilator
 USE_HLS ?= 0
 NCORES ?= 4
 IMEM_SIZE_KB ?= 128
-DMEM_SIZE_KB ?= 128
-CLK_FREQ_MHZ ?= 140
+DMEM_SIZE_KB ?= 120
+STACK_SIZE_KB ?= 2
+CLK_FREQ_MHZ ?= 135
 
 IMEM_SIZE ?= $(shell echo $(IMEM_SIZE_KB)*1024 | bc)
 DMEM_SIZE ?= $(shell echo $(DMEM_SIZE_KB)*1024 | bc)
+STACK_SIZE ?= $(shell echo $(STACK_SIZE_KB)*1024 | bc)
 IMEM_SIZE_HEX := $(shell printf "0x%X" $(IMEM_SIZE))
 DMEM_SIZE_HEX := $(shell printf "0x%X" $(DMEM_SIZE))
+STACK_SIZE_HEX := $(shell printf "0x%X" $(STACK_SIZE))
 
 src_dir := src
 cfu_dir := cfu

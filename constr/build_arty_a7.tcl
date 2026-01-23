@@ -11,6 +11,7 @@ set nproc [exec nproc]
 set ncores 4
 set imem_size ""
 set dmem_size ""
+set stack_size ""
 set freq 140
 
 create_project -force $proj_name $top_dir/vivado -part $part_name
@@ -46,6 +47,15 @@ for {set i 0} {$i < $argc} {incr i} {
             puts "Error: --dmem_size requires a value"
             exit 1
         }
+    } elseif {[lindex $argv $i] eq "--stack_size"} {
+        incr i
+        if {$i < $argc} {
+            set stack_size [lindex $argv $i]
+            puts "STACK_SIZE set to: $stack_size"
+        } else {
+            puts "Error: --stack_size requires a value"
+            exit 1
+        }
     } elseif {[lindex $argv $i] eq "--clk_freq"} {
         incr i
         if {$i < $argc} {
@@ -72,6 +82,9 @@ if {$imem_size ne ""} {
 }
 if {$dmem_size ne ""} {
     lappend defines "DMEM_SIZE=$dmem_size"
+}
+if {$stack_size ne ""} {
+    lappend defines "STACK_SIZE=$stack_size"
 }
 if {[lsearch $defines "USE_HLS"] < 0 && [get_property verilog_define [get_filesets sources_1]] ne ""} {
     # keep any HLS define already set in the HLS branch

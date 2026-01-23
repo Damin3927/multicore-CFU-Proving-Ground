@@ -13,7 +13,17 @@ TARGET := nexys_a7
 all: prog build
 
 build:
-	$(RTLSIM) --binary --trace --top-module top -DNCORES=$(NCORES) -DIMEM_SIZE=$(IMEM_SIZE) -DDMEM_SIZE=$(DMEM_SIZE) -DCLK_FREQ_MHZ=$(CLK_FREQ_MHZ) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND -o top $(verilog_srcs)
+	$(RTLSIM) --binary --trace --top-module top \
+		-DNCORES=$(NCORES) \
+		-DIMEM_SIZE=$(IMEM_SIZE) \
+		-DDMEM_SIZE=$(DMEM_SIZE) \
+		-DSTACK_SIZE=$(STACK_SIZE) \
+		-DCLK_FREQ_MHZ=$(CLK_FREQ_MHZ) \
+		$(if $(filter 1,$(USE_HLS)),-DUSE_HLS --Wno-TIMESCALEMOD) \
+		--Wno-WIDTHTRUNC \
+		--Wno-WIDTHEXPAND \
+		-o top \
+		$(verilog_srcs)
 	gcc -O2 dispemu/dispemu.c -o build/dispemu -lcairo -lX11
 
 prog:
@@ -23,6 +33,7 @@ prog:
 		-Wl,--defsym,_num_cores=$(NCORES) \
 		-Wl,--defsym,IMEM_SIZE=$(IMEM_SIZE_HEX) \
 		-Wl,--defsym,DMEM_SIZE=$(DMEM_SIZE_HEX) \
+		-Wl,--defsym,_stack_size=$(STACK_SIZE_HEX) \
 		-DNCORES=$(NCORES) $(if $(filter 1,$(USE_HLS)),-DUSE_HLS) -o build/main.elf app/crt0.s $(c_srcs) -lm
 	make initf
 
@@ -70,7 +81,13 @@ bit:
 		echo "Plese run 'make init' first."; \
 		exit 1; \
 	fi
-	$(VIVADO) -mode batch -source build.tcl -tclargs --ncores $(NCORES) --imem_size $(IMEM_SIZE) --dmem_size $(DMEM_SIZE) --clk_freq $(CLK_FREQ_MHZ) $(if $(filter 1,$(USE_HLS)),--hls)
+	$(VIVADO) -mode batch -source build.tcl \
+		-tclargs --ncores $(NCORES) \
+		--imem_size $(IMEM_SIZE) \
+		--dmem_size $(DMEM_SIZE) \
+		--stack_size $(STACK_SIZE) \
+		--clk_freq $(CLK_FREQ_MHZ) \
+		$(if $(filter 1,$(USE_HLS)),--hls)
 	cp vivado/main.runs/impl_1/main.bit build/.
 	@if [ -f vivado/main.runs/impl_i/main.ltx ]; then \
 		cp -f vivado/main.runs/impl_i/main.ltx build/.; \
